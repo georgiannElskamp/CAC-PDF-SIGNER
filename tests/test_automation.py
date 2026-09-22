@@ -46,6 +46,15 @@ class IssueLifecycleTests(unittest.TestCase):
             self.assertEqual(api.call_count, 2)
             self.assertEqual(api.call_args.kwargs["method"], "POST")
 
+    def test_interrupted_first_closure_reuses_created_issue_on_next_report(self):
+        with patch.object(automation, "api", side_effect=[[], self.issue(), OSError("interrupted"),
+                                                         [self.issue()], self.issue("closed")]) as api:
+            with self.assertRaises(OSError):
+                automation.upsert_issue("editor:123", "Compatibility", "Report", state="closed")
+            automation.upsert_issue("editor:123", "Compatibility", "Report", state="closed")
+            writes = [call.kwargs["method"] for call in api.call_args_list if "method" in call.kwargs]
+            self.assertEqual(writes, ["POST", "PATCH", "PATCH"])
+
     def test_searches_all_pages_and_ignores_user_issues_and_pull_requests(self):
         first = [self.issue(user={"login": "someone"})] * 99 + [self.issue(pull_request={"url": "example"})]
         with patch.object(automation, "api", side_effect=[first, [self.issue("closed")], {}]) as api:
