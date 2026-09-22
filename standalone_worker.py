@@ -24,7 +24,22 @@ def emit(message):
 
 @contextmanager
 def signing_lock():
-    """Serialize PIN/Save As dialogs across PDF tabs in this Windows session."""
+    """Serialize PIN/Save As dialogs across the user's PDF tabs."""
+    if sys.platform == "linux":
+        import fcntl
+
+        directory = state_directory()
+        directory.mkdir(parents=True, exist_ok=True, mode=0o700)
+        descriptor = os.open(directory / "signing.lock", os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600)
+        try:
+            try:
+                fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as exc:
+                raise ValueError("Another CAC signing or Save As operation is already open.") from exc
+            yield
+        finally:
+            os.close(descriptor)
+        return
     kernel = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel.CreateMutexW.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_wchar_p]
     kernel.CreateMutexW.restype = ctypes.c_void_p
@@ -94,8 +109,8 @@ class SigningSession:
         return content
 
     def sign(self, request):
-        from card_selection import choose_certificate
-        from signing import CardSigner, certificates, sign_bytes
+        from platform_card import card_signer
+        from signing import sign_bytes
 
         pdf = base64.b64decode(request["pdf"], validate=True)
         if len(pdf) > MAX_PDF or not pdf.startswith(b"%PDF-"):
@@ -107,8 +122,8 @@ class SigningSession:
         pending = self.pending(source_hash, field)
         if pending:
             return (*pending, True)
-        info = choose_certificate(certificates(self.bridge))
-        signed = sign_bytes(pdf, CardSigner(info, self.bridge), {"field": field})
+        with card_signer(self.bridge) as signer:
+            signed = sign_bytes(pdf, signer, {"field": field})
         name = re.sub(
             r"[^a-zA-Z0-9_. -]", "_", str(request.get("name", "document.pdf"))
         )[:120]
@@ -140,7 +155,7 @@ class SigningSession:
         if (
             not target.is_absolute()
             or target.suffix.lower() != ".pdf"
-            or ":" in str(target)[2:]
+            or (sys.platform == "win32" and ":" in str(target)[2:])
         ):
             raise ValueError("Choose a PDF file in the Save As dialog.")
         target = target.resolve()
@@ -217,14 +232,17 @@ def main():
             Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parent))
             / "pdfsign-bridge.exe"
         )
-        if not bridge.is_file():
+        if sys.platform == "win32" and not bridge.is_file():
             raise RuntimeError(
                 "The plugin's bundled signing component is missing. Reinstall the plugin."
             )
         if request.get("op") == "health":
             import signing  # noqa: F401 -- validate packaged dependencies without accessing a card
+            if sys.platform == "linux":
+                from linux_card import check_runtime
 
-            result = {"ok": True, "version": VERSION, "bundledBridge": True}
+                check_runtime()
+            result = {"ok": True, "version": VERSION, "platform": sys.platform, "bundledBridge": True}
         elif request.get("op") == "sign":
             result = SigningSession(state_directory(), bridge).run(request)
         else:
@@ -232,6 +250,12 @@ def main():
         emit({"event": "result", **result})
         return 0
     except Exception as exc:
+        if sys.platform == "linux":
+            from linux_ui import Cancelled
+
+            if isinstance(exc, Cancelled):
+                emit({"event": "result", "ok": True, "cancelled": True})
+                return 0
         emit({"event": "result", "ok": False, "error": str(exc)})
         return 1
     finally:
@@ -239,5 +263,7 @@ def main():
 
 
 if __name__ == "__main__":
+    if sys.platform == "linux":
+        os.umask(0o077)
     logging.disable(logging.CRITICAL)
     raise SystemExit(main())

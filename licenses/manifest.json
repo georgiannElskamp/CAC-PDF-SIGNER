@@ -34,6 +34,141 @@
       "file": "microsoft-runtime-CPython.txt",
       "source": "https://raw.githubusercontent.com/python/cpython/v3.11.9/PC/crtlicense.txt",
       "sha256": "3c71b3ae243121f6f227374cd1ef7c59ed07b1969b330d0e947f91a3a1b3fd73"
+    },
+    {
+      "file": "linux-python-LICENSE.bdb.txt",
+      "sha256": "3bdff06e69991c94664f2ef5c5f8096f60b7dbec071756ea6cc26b445e06ec5b",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.bzip2.txt",
+      "sha256": "1f38bbc7caacafd65169276d759c0d88c991b753b643ce35d0e45ea1971dd441",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.cpython.txt",
+      "sha256": "86e61415828a8b5b06ec8d024e6f086ce155a8b85fd0c419c0ba4dc004e74fdd",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.expat.txt",
+      "sha256": "122f2c27000472a201d337b9b31f7eb2b52d091b02857061a8880371612d9534",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.libX11.txt",
+      "sha256": "2daec087a88e7c9b8082557cdeebad5bbb8155a4137472f0b22e269cd99d0c1e",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.libXau.txt",
+      "sha256": "56abe29bb1d9806a9e04fa9f80fed2c0f18027594df3f098148d814aef6bddfa",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.libedit.txt",
+      "sha256": "29cea33c32bbc9785142386377915612a2fa786482c46843383384aded2e09b1",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.libffi.txt",
+      "sha256": "deaf3a42effb551a5b140fa9afefed183a27f1341c6d1bf430d106a5e6931fc0",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.liblzma.txt",
+      "sha256": "828d5b508798d6a95c1c08ce5eee517a84ed1bda14eac58c440b6bce2c5cf1ca",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.libuuid.txt",
+      "sha256": "122ee1f7e258f2c3c0e538a75c037684f420454bf3850ddc74ce750bbf5fe86b",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.libxcb.txt",
+      "sha256": "c5ffbfeaa501071ceeb97b7de2c0d703fdaa35de01c0fb6cbac1c28453a3e9fd",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.mpdecimal.txt",
+      "sha256": "669512af7219f58be03a398766d7c9da11a3b3df9d3f05cb74c5ceca25c8da3b",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.ncurses.txt",
+      "sha256": "87a4c4442337b8968ef956031c406b74f9cb7149b7ba87311bdaba534816201c",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.openssl-1.1.txt",
+      "sha256": "9c04cce50c4989d5601dd8b07f6ab922c40388b66ac736c9007cb1ed9d9dd560",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.openssl-3.txt",
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.sqlite.txt",
+      "sha256": "38bef3d28b24f145ea293bd3b6eb4b20396982abc8303128fb493986ea5bc719",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.tcl.txt",
+      "sha256": "c0a69a2bfd757361ec7e6143973b103c90409316b49e9c88db26ad6388e79f16",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.tix.txt",
+      "sha256": "3ac5cdd0bef6c43ce34c6a7ced452081d9e5a0bf94082b9f9147d23ec9e214f5",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-python-LICENSE.zlib.txt",
+      "sha256": "818922b2620f12801a12bf78e399644a30990e66824abd8ca8ec24d451d6f92c",
+      "source": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-pgo%2Blto-full.tar.zst"
+    },
+    {
+      "file": "linux-pcsc-lite-LICENSE.txt",
+      "sha256": "7dffe53fb02dd12a3518335d9c948484ee91ca098f1fac2ee9f9af639bbde7c9",
+      "source": "https://pcsclite.apdu.fr/files/pcsc-lite-2.5.2.tar.xz"
+    },
+    {
+      "file": "linux-ccid-LICENSE.txt",
+      "sha256": "20e50fe7aae3e56378ebf0417d9de904f55a0e61e4df315333e632a4d3555d95",
+      "source": "https://ccid.apdu.fr/files/ccid-1.8.4.tar.xz"
+    },
+    {
+      "file": "linux-opensc-LICENSE.txt",
+      "sha256": "376b54d4c5f4aa99421823fa4da93e3ab73096fce2400e89858632aa7da24a14",
+      "source": "https://github.com/OpenSC/OpenSC/releases/download/0.27.1/opensc-0.27.1.tar.gz"
+    },
+    {
+      "file": "linux-libusb-LICENSE.txt",
+      "sha256": "5df07007198989c622f5d41de8d703e7bef3d0e79d62e24332ee739a452af62a",
+      "source": "https://github.com/libusb/libusb/releases/download/v1.0.30/libusb-1.0.30.tar.bz2"
+    },
+    {
+      "file": "linux-zlib-LICENSE.txt",
+      "sha256": "e32ff4e00d9d94930537635291da39e7e612703334bf6fde8c7f1686fe8a45a2",
+      "source": "https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.xz"
+    },
+    {
+      "file": "linux-openssl-LICENSE.txt",
+      "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
+      "source": "https://github.com/openssl/openssl/releases/download/openssl-3.5.8/openssl-3.5.8.tar.gz"
+    },
+    {
+      "file": "linux-gcc-runtime-COPYRIGHT.txt",
+      "sha256": "9865be517c31de50eb2b36a8957ccd97942807974afad2515578101d1168887a",
+      "source": "https://sources.debian.org/src/gcc-8/8.3.0-6/debian/copyright"
+    },
+    {
+      "file": "linux-python-sources.json",
+      "source": "https://github.com/astral-sh/python-build-standalone/blob/20240726/pythonbuild/downloads.py",
+      "sha256": "3056743d0550fdc2b392b401eae7a3d9e1762df6a832d87775f77fbae1f50030"
     }
   ]
 }

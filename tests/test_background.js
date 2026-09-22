@@ -6,6 +6,7 @@ const root = path.resolve(__dirname, "..");
 function adapterTest() {
   let timer,
     onModified,
+    formReads = 0,
     clicks = [],
     errors = [];
   const empty = {
@@ -21,12 +22,13 @@ function adapterTest() {
     Vh: function () {},
   };
   const original = empty.Vh;
+  const widgets = [empty, signed];
   const fields = [
     { type: 33, AP: { i: 11 }, name: "PreparedBy", Sig: 0 },
     { type: 33, AP: { i: 12 }, name: "ReviewedBy", Sig: 1 },
   ];
   const api = {
-    // Preserve the exact observed editor function; formatting must not alter this fixture.
+    // Exact editor fingerprint.
     asc_getPdfProps: vm.runInNewContext(
       "(function(){return this.jf?this.jf.vWe():null})",
     ),
@@ -38,10 +40,13 @@ function adapterTest() {
     },
     asc_unregisterCallback() {},
     jf: {
-      Qd: () => ({ lC: [empty, signed] }),
+      Qd: () => ({ lC: widgets }),
       file: {
         Mp: {
-          getInteractiveFormsInfo: () => ({ Fields: fields }),
+          getInteractiveFormsInfo: () => {
+            formReads++;
+            return { Fields: fields };
+          },
           getFileBinary: () => Buffer.from("%PDF-1.7 test"),
         },
       },
@@ -89,6 +94,17 @@ function adapterTest() {
   assert.throws(() => adapter.snapshot("PreparedBy"), /Save your PDF edits/);
   api.isDocumentModified = () => false;
   assert.throws(() => adapter.snapshot("ReviewedBy"), /already signed/);
+  widgets.splice(1, 1);
+  const readsBeforeIdle = formReads;
+  timer();
+  timer();
+  assert.equal(formReads, readsBeforeIdle);
+  const later = { type: 33, u0: () => 13, Cte: () => false, Vh: function () {} };
+  widgets.push(later);
+  fields.push({ type: 33, AP: { i: 13 }, name: "ApprovedBy", Sig: 0 });
+  timer();
+  later.Vh();
+  assert.deepEqual(clicks, ["PreparedBy", "ApprovedBy"]);
   api.isDocumentModified = () => true;
   onModified();
   api.isDocumentModified = () => false;

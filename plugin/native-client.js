@@ -1,4 +1,3 @@
-/* Editor-side client for the native signing host. */
 window.CACNativeClient = function () {
   "use strict";
   const frame = document.createElement("iframe");

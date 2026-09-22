@@ -60,3 +60,13 @@ Windows supplies the Universal CRT and API-set libraries; copies of `ucrtbase.dl
 - Microsoft redistribution terms: https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
 
 `licenses/manifest.json` records the upstream URLs and checksums for the additional license files. The builder verifies these files, runtime versions, and the native DLL inventory before packaging.
+
+## Linux runtime
+
+The Linux worker uses CPython 3.11.9 from python-build-standalone's 20240726 release, including OpenSSL 3.0.14 and the runtime's built-in libraries. `native_linux/runtime.json` identifies the distribution and checksums. `licenses/linux-python-sources.json` provides source locations, versions and checksums for its bundled components, including Berkeley DB under the Sleepycat license. Their complete upstream notices are retained as `licenses/linux-python-LICENSE.*`. Project integration source accompanies the plugin; Python package source releases are available from PyPI at the pinned versions in `requirements-lock.txt` and `requirements-linux.txt`.
+
+The worker includes python-pkcs11 0.10.0 and its license under `licenses/linux/dependencies`. GCC 8.3 runtime libraries are covered by the GPL with the GCC Runtime Library Exception; their Debian copyright and license information is in `licenses/linux-gcc-runtime-COPYRIGHT.txt`.
+
+The native card stack includes OpenSC 0.27.1 (LGPL-2.1-or-later), libusb 1.0.30 (LGPL-2.1-or-later), pcsc-lite 2.5.2 and CCID 1.8.4 (their BSD-style terms), OpenSSL 3.5.8 (Apache-2.0), and zlib 1.3.2 (zlib license). License texts are in `licenses/linux-*-LICENSE.txt`. Exact source URLs and checksums are in `native_linux/sources.json`; OpenSC, libusb, pcsc-lite and CCID source archives accompany the plugin under `native-sources/linux/`. The pcsc-lite changes for private IPC paths are supplied in `source/native_linux/private_pcsc.py`.
+
+The operating system supplies glibc and GTK 3. The Linux worker contains no Windows executable or Microsoft runtime dependency. The combined plugin also contains a separate Windows worker, subject to the Windows notices above.

@@ -1,4 +1,4 @@
-"""Build the standalone Windows plugin."""
+"""Build the combined plugin from Windows and Linux workers."""
 
 import argparse
 import hashlib
@@ -25,6 +25,7 @@ ASSETS = (
     "native-client.js",
     "native-host.js",
     "native.html",
+    "launch-linux.sh",
     "standalone-background.js",
 )
 REQUIRED_NOTICES = {
@@ -62,6 +63,9 @@ def build_environment():
     env.pop("PYTHONHOME", None)
     env.pop("PYTHONPATH", None)
     base = Path(sys.base_prefix)
+    if sys.platform != "win32":
+        env["PATH"] = os.pathsep.join((str(Path(sys.executable).parent), "/usr/bin", "/bin"))
+        return env
     windows = Path(os.environ["SystemRoot"])
     env["PATH"] = os.pathsep.join(
         str(path)
@@ -104,7 +108,7 @@ def licenses():
 
     if (
         sys.version_info[:3] != (3, 11, 9)
-        or ssl.OPENSSL_VERSION.split()[1] != "3.0.13"
+        or ssl.OPENSSL_VERSION.split()[1] != ("3.0.13" if sys.platform == "win32" else "3.0.14")
         or backend.openssl_version_text().split()[1] != "4.0.2"
     ):
         raise ValueError("Runtime versions changed; update the native license inventory.")
@@ -115,6 +119,8 @@ def licenses():
     ]
     names.append("pyinstaller")
     names.append("setuptools")
+    if sys.platform == "linux":
+        names.append("python-pkcs11")
     result = native_licenses()
     for name in names:
         distribution = importlib.metadata.distribution(name)
@@ -138,13 +144,24 @@ def licenses():
                 f"License file missing for {name}; review the distribution before publishing."
             )
     python_license = Path(sys.base_prefix) / "LICENSE.txt"
+    if not python_license.exists():
+        python_license = Path(sys.base_prefix) / "lib/python3.11/LICENSE.txt"
     result["licenses/dependencies/Python/LICENSE.txt"] = python_license.read_bytes()
     return result
 
 
-def build(destination, bridge, reuse_executable=False):
+def build(destination, bridge, reuse_executable=False, linux_bundle=None):
     if sys.platform != "win32" or sys.maxsize <= 2**32:
         raise ValueError("Build with 64-bit Python on Windows.")
+    if linux_bundle is None:
+        raise ValueError("Supply the Linux bundle for the combined plugin.")
+    linux_runtime = linux_bundle / "native/linux-x86_64"
+    linux_manifest = json.loads((linux_runtime / "manifest.json").read_text())
+    if linux_manifest["version"] != VERSION or linux_manifest["sha256"] != hashlib.sha256((linux_runtime / "cac-signer").read_bytes()).hexdigest():
+        raise ValueError("Linux runtime version or checksum differs from its manifest.")
+    for name, digest in linux_manifest["runtimeSources"].items():
+        if Path(name).name != name or hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != digest:
+            raise ValueError("Linux worker has stale runtime source: " + name)
     destination = outside_checkout(destination)
     destination.mkdir(parents=True, exist_ok=True)
     count, findings = audit(ROOT, include_release=False)
@@ -220,6 +237,13 @@ def build(destination, bridge, reuse_executable=False):
         for name in ASSETS:
             archive.write(ROOT / "plugin" / name, name)
         archive.write(executable, "native/cac-signer.exe")
+        if linux_bundle:
+            for path in sorted(linux_bundle.rglob("*")):
+                if path.is_file():
+                    name = path.relative_to(linux_bundle).as_posix()
+                    if not name.startswith(("native/linux-", "licenses/linux/", "native-sources/linux/")):
+                        raise ValueError("Unexpected Linux bundle file: " + name)
+                    archive.write(path, name)
         for path in source_files(ROOT):
             archive.write(path, "source/" + path.relative_to(ROOT).as_posix())
         for name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
@@ -247,10 +271,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--bridge", required=True, type=Path)
+    parser.add_argument("--linux-bundle", type=Path, required=True)
     parser.add_argument(
         "--reuse-executable",
         action="store_true",
         help="Repackage assets only; never use after changing Python code.",
     )
     args = parser.parse_args()
-    print(build(args.output, args.bridge, args.reuse_executable))
+    print(build(args.output, args.bridge, args.reuse_executable, args.linux_bundle))

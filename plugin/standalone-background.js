@@ -67,6 +67,9 @@
     }
   }
   Asc.plugin.init = function () {
+    // PDF form creation uses the document editor; signing starts after reopening the saved PDF.
+    const info = Asc.plugin.info || {};
+    if (info.editorType && info.editorType !== "pdf" && info.editorSubType !== "pdf") return;
     try {
       client = CACNativeClient();
       adapter = CACDesktop(parent);

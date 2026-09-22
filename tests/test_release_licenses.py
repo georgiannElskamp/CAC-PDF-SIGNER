@@ -1,5 +1,6 @@
 import os
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -46,7 +47,10 @@ class ReleaseLicenseTests(unittest.TestCase):
         self.assertNotIn("unrelated-native-libraries", env["PATH"])
         self.assertNotIn("PYTHONPATH", env)
         self.assertNotIn("PYTHONHOME", env)
-        self.assertIn(str(Path(os.environ["SystemRoot"]) / "System32"), env["PATH"])
+        if sys.platform == "win32":
+            self.assertIn(str(Path(os.environ["SystemRoot"]) / "System32"), env["PATH"])
+        else:
+            self.assertIn("/usr/bin", env["PATH"])
 
     def test_existing_release_is_not_embedded_in_source(self):
         release = self.root / "release"

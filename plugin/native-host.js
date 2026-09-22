@@ -1,4 +1,3 @@
-/* Native host for the bundled signing process. */
 (() => {
   "use strict";
   const channel = "cac-native-v1";
@@ -7,22 +6,31 @@
     parent.postMessage({ channel, ...data }, "*");
   }
   function executable() {
-    const own = location.href.replace(/^onlyoffice:\/\/plugin\//, "");
+    let own = location.href.replace(/^onlyoffice:\/\/plugin\//, "");
+    if (own.startsWith("/")) own = "file://" + own;
     const url = new URL("native/cac-signer.exe", own);
     if (url.protocol !== "file:" || url.hostname)
       throw new Error(
         "Install this plugin locally through ONLYOFFICE Plugin Manager.",
       );
+    if (!/^\/[A-Za-z]:\//.test(url.pathname)) {
+      if (!/Linux/.test(navigator.platform || ""))
+        throw new Error("This package supports Windows and Linux desktop editors.");
+      const launcher = decodeURIComponent(new URL("launch-linux.sh", own).pathname);
+      if (!launcher.startsWith("/") || /[\r\n\0]/.test(launcher))
+        throw new Error("Unsupported plugin installation path.");
+      return '/bin/sh "' + launcher.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+    }
     const path = decodeURIComponent(url.pathname)
       .replace(/^\/([A-Za-z]:)/, "$1")
       .replace(/\//g, "\\");
     if (!/^[A-Za-z]:\\/.test(path) || /[\r\n"]/g.test(path))
       throw new Error("Unsupported plugin installation path.");
-    // This editor build splits the executable name at the first space, even inside quotes.
-    if (/\s/.test(path))
+    if (/\s/.test(path)) {
       throw new Error(
-        "ONLYOFFICE 9.4 cannot launch this component from a Windows profile path containing spaces. This editor limitation requires an update.",
+        "This ONLYOFFICE Windows build cannot launch plugins from paths containing spaces. A Windows profile path without spaces is required.",
       );
+    }
     return path;
   }
   function run(id, request) {
@@ -103,8 +111,7 @@
               const end = Math.min(position + 65536, input.length);
               process.stdin(input.slice(position, end));
               position = end;
-              // Hidden editor frames throttle timers; microtasks keep large PDFs
-              // flowing before the worker's initial request deadline.
+              // Microtasks avoid timer throttling in hidden editor frames.
               if (position < input.length) queueMicrotask(writeChunk);
             } catch (error) {
               finish({

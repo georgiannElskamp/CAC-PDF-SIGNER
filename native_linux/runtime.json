@@ -1,0 +1,15 @@
+{
+  "architecture": "x86_64",
+  "glibcBaseline": "2.28",
+  "python": {
+    "version": "3.11.9",
+    "distribution": "python-build-standalone 20240726 pgo+lto",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20240726/cpython-3.11.9%2B20240726-x86_64-unknown-linux-gnu-install_only.tar.gz",
+    "sha256": "f6e955dc9ddfcad74e77abe6f439dac48ebca14b101ed7c85a5bf3206ed2c53d",
+    "fullArchiveSha256": "ee7ab314b049db55e5c518d1ad5fd4564f55cf79646a4bf97d6b79e3e5ff688a"
+  },
+  "buildTools": {
+    "gcc": "8.3.0",
+    "pyinstaller": "6.19.0"
+  }
+}

@@ -31,7 +31,7 @@ FORBIDDEN_SUFFIXES = {
 }
 FORBIDDEN_NAMES = {"settings.json", "connection.js", ".env", "helper.pid"}
 FORBIDDEN_DIRS = {"Signed", "runtime", ".venv", "venv", "__pycache__"}
-TEXT_SUFFIXES = {".py", ".js", ".html", ".json", ".md", ".txt", ".yml", ".yaml", ".cmd"}
+TEXT_SUFFIXES = {".py", ".js", ".html", ".json", ".md", ".txt", ".yml", ".yaml", ".cmd", ".sh", ".patch"}
 TEXT_NAMES = {".gitignore", ".gitattributes", "LICENSE", "NOTICE"}
 PATTERNS = {
     "embedded key or certificate": re.compile(
@@ -111,7 +111,12 @@ def audit_release(root):
             if bundled != set(files):
                 raise ValueError("Bundled source inventory differs from the repository.")
             for name, path in files.items():
-                if archive.read("source/" + name) != path.read_bytes():
+                packaged, local = archive.read("source/" + name), path.read_bytes()
+                if path.suffix.lower() != ".png":
+                    # Git normalizes text line endings on checkout.
+                    packaged = packaged.replace(b"\r\n", b"\n")
+                    local = local.replace(b"\r\n", b"\n")
+                if packaged != local:
                     raise ValueError(f"Bundled source is stale: {name}")
             config = json.loads((root / "plugin/config.json").read_text())
             if json.loads(archive.read("config.json")) != config:
@@ -120,7 +125,7 @@ def audit_release(root):
                 raise ValueError("Installation notes have a different version.")
             assets = {"desktop-adapter.js", "plugins.js", "icon.png", "icon@2x.png",
                       "native-client.js", "native-host.js", "native.html",
-                      "standalone-background.js", "standalone.html"}
+                      "standalone-background.js", "standalone.html", "launch-linux.sh"}
             for name in assets:
                 if archive.read(name) != (root / "plugin" / name).read_bytes():
                     raise ValueError(f"Bundled plugin asset is stale: {name}")
@@ -131,12 +136,24 @@ def audit_release(root):
                 if path.is_file() and archive.read(path.relative_to(root).as_posix()) != path.read_bytes():
                     raise ValueError("Bundled native dependency notices differ.")
             allowed = assets | {"config.json", "bundle.js", "native/cac-signer.exe",
+                                "native/linux-x86_64/cac-signer",
+                                "native/linux-x86_64/manifest.json",
                                 "LICENSE", "THIRD_PARTY_NOTICES.md"}
             if not allowed.issubset(names):
                 raise ValueError("Release archive is missing required files.")
             bundle = "window.CAC_BUNDLE = " + json.dumps({"version": config["version"]}) + ";\n"
             if archive.read("bundle.js").decode() != bundle:
                 raise ValueError("Bundled worker version differs from the manifest.")
+            native_sources = {"native-sources/linux/" + x["file"]: x for x in
+                              json.loads((root / "native_linux/sources.json").read_text())
+                              if x["file"].startswith(("opensc-", "libusb-", "pcsc-lite-", "ccid-"))}
+            for name, item in native_sources.items():
+                if hashlib.sha256(archive.read(name)).hexdigest() != item["sha256"]:
+                    raise ValueError("Bundled middleware source checksum differs: " + name)
+            allowed |= set(native_sources)
+            linux_manifest = json.loads(archive.read("native/linux-x86_64/manifest.json"))
+            if linux_manifest["version"] != config["version"] or hashlib.sha256(archive.read("native/linux-x86_64/cac-signer")).hexdigest() != linux_manifest["sha256"]:
+                raise ValueError("Linux worker checksum or version differs.")
             if any(n not in allowed and not n.startswith(("source/", "licenses/")) for n in names):
                 raise ValueError("Unexpected file in the release archive.")
     except (OSError, ValueError, KeyError, zipfile.BadZipFile) as error:

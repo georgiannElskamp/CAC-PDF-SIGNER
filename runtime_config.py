@@ -1,9 +1,10 @@
 """Paths for the signing runtime."""
 
 import os
+import sys
 from pathlib import Path
 
-VERSION = "0.5.3"
+VERSION = "0.6.0-dev"
 MAX_PDF = 40 * 1024 * 1024
 APP_NAME = "ONLYOFFICE-CAC-Signature"
 
@@ -12,6 +13,10 @@ def state_directory():
     override = os.environ.get("CAC_SIGNATURE_HOME")
     if override:
         return Path(override).expanduser().resolve()
+    if sys.platform == "linux":
+        local = os.environ.get("XDG_DATA_HOME")
+        base = Path(local) if local and Path(local).is_absolute() else Path.home() / ".local/share"
+        return base / APP_NAME
     local = os.environ.get("LOCALAPPDATA")
     if not local:
         raise RuntimeError(

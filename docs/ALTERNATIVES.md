@@ -1,6 +1,6 @@
 # Related signing projects
 
-Reviewed on 2026-09-22 using the projects' repositories, documentation and license files. These are documented capabilities, not results of local CAC testing. None of the projects reviewed documents the same complete workflow as this plugin: a local ONLYOFFICE background plugin that signs an existing PDF field with a CAC, prompts through Windows, and then opens Save As.
+Reviewed on 2026-09-22 from project documentation and licenses. These projects have not been tested locally with a CAC.
 
 | Project | Similar capabilities | Setup and differences | Project license |
 | --- | --- | --- | --- |
@@ -12,13 +12,7 @@ Reviewed on 2026-09-22 using the projects' repositories, documentation and licen
 | [Stirling PDF](https://github.com/Stirling-Tools/Stirling-PDF) | Desktop certificate signing through the Windows certificate store and PKCS#11. | A separate PDF application. Device-local signing and visible placement have documented limitations; verify the particular release and connection mode. It is not an ONLYOFFICE extension. | MIT core, with separately restricted desktop and other directories |
 | [SignBridge](https://github.com/ASE-Bucure-ti/SignBridge) | Browser-to-native PKCS#11 signing with visible/invisible PDF signatures. | Requires a browser extension, native host and integrating web application/backend. Useful for web portals; not a single-file ONLYOFFICE plugin. | MIT at repository root; dependencies retain their licenses |
 
-## Choosing between them
-
-JSignPdf is the strongest standalone open-source candidate to evaluate if signing outside ONLYOFFICE is acceptable. PDF QES Signer is another option when PKCS#11 configuration and Python installation are acceptable. Neither project's documentation establishes compatibility with every CAC/provider combination.
-
-LibreSign is the closest editor integration, but addresses team signing in Nextcloud. The pdf-sign and SignBridge projects fit web-portal integrations. Our plugin's narrower purpose is to connect existing ONLYOFFICE signature fields directly to a local Windows CAC signing operation with a single installable package.
-
-Stirling PDF deserves a functional trial, but its desktop licensing prevents treating the entire repository as freely reusable MIT code. Its [root license](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/LICENSE) lists exceptions, and the [desktop license](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/frontend/editor/src/desktop/LICENSE) restricts production use and redistribution. [Hardware-token signing was merged](https://github.com/Stirling-Tools/Stirling-PDF/pull/6765); [local certificate availability with a remote server](https://github.com/Stirling-Tools/Stirling-PDF/issues/7316) and [visible placement](https://github.com/Stirling-Tools/Stirling-PDF/issues/7261) have separate issue reports.
+Stirling PDF's [root license](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/LICENSE) lists exceptions; its [desktop license](https://github.com/Stirling-Tools/Stirling-PDF/blob/main/frontend/editor/src/desktop/LICENSE) restricts production use and redistribution. See its [hardware-token implementation](https://github.com/Stirling-Tools/Stirling-PDF/pull/6765), [remote-server certificate issue](https://github.com/Stirling-Tools/Stirling-PDF/issues/7316), and [visible-placement issue](https://github.com/Stirling-Tools/Stirling-PDF/issues/7261).
 
 ## Earlier browser options
 

@@ -1,5 +1,4 @@
-/* ONLYOFFICE Desktop 9.4.0 adapter. These internal member names are guarded below.
-   Source references and compatibility limits are documented in README.md. */
+/* ONLYOFFICE Desktop 9.4.0 PDF adapter. */
 window.CACDesktop = function (host) {
   "use strict";
   const api = host.Asc && host.Asc.editor;
@@ -18,8 +17,7 @@ window.CACDesktop = function (host) {
   }
   const hooked = new Map();
   let timer;
-  // The engine retains its original PDF stream even after an in-place save.
-  // Remember edits until reload; checking only isDocumentModified() is unsafe.
+  // Saving does not refresh the editor's original PDF stream.
   let editedSinceLoad = api.isDocumentModified();
   const onModified = () => {
     if (api.isDocumentModified()) editedSinceLoad = true;
@@ -67,16 +65,19 @@ window.CACDesktop = function (host) {
     function scan() {
       try {
         const r = renderer(),
-          doc = r.Qd(),
-          forms = r.file.Mp.getInteractiveFormsInfo().Fields || [];
+          doc = r.Qd();
         if (!Array.isArray(doc.lC))
           throw new Error(
             "PDF signature fields are not supported by this ONLYOFFICE build.",
           );
-        for (const w of doc.lC) {
-          if (w.type !== 33 || hooked.has(w)) continue;
+        const pending = doc.lC.filter((w) => w.type === 33 && !hooked.has(w));
+        if (!pending.length) return;
+        const forms = r.file.Mp.getInteractiveFormsInfo().Fields || [];
+        for (const w of pending) {
+          if (typeof w.u0 !== "function") continue;
+          const appearance = w.u0();
           const f = forms.find(
-            (f) => f.AP && typeof w.u0 === "function" && f.AP.i === w.u0(),
+            (f) => f.AP && f.AP.i === appearance,
           );
           if (!f || f.type !== 33 || f.Sig || f.display === 1 || !f.name)
             continue;

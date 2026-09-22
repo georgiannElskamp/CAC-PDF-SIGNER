@@ -1,0 +1,183 @@
+{
+  "provenance": "https://github.com/astral-sh/python-build-standalone/blob/20240726/pythonbuild/downloads.py",
+  "components": {
+    "bdb": {
+      "url": "https://ftp.osuosl.org/pub/blfs/conglomeration/db/db-6.0.19.tar.gz",
+      "sha256": "2917c28f60903908c2ca4587ded1363b812c4e830a5326aaa77c9879d13ae18e",
+      "version": "6.0.19",
+      "licenses": [
+        "Sleepycat"
+      ],
+      "license_file": "LICENSE.bdb.txt"
+    },
+    "bzip2": {
+      "url": "https://sourceware.org/pub/bzip2/bzip2-1.0.8.tar.gz",
+      "sha256": "ab5a03176ee106d3f0fa90e381da478ddae405918153cca248e682cd0c4a2269",
+      "version": "1.0.8",
+      "licenses": [
+        "bzip2-1.0.6"
+      ],
+      "license_file": "LICENSE.bzip2.txt"
+    },
+    "cpython-3.11": {
+      "url": "https://www.python.org/ftp/python/3.11.9/Python-3.11.9.tar.xz",
+      "sha256": "9b1e896523fc510691126c864406d9360a3d1e986acbda59cda57b5abda45b87",
+      "version": "3.11.9",
+      "licenses": [
+        "Python-2.0",
+        "CNRI-Python"
+      ],
+      "license_file": "LICENSE.cpython.txt"
+    },
+    "expat": {
+      "url": "https://github.com/libexpat/libexpat/releases/download/R_2_5_0/expat-2.5.0.tar.xz",
+      "sha256": "ef2420f0232c087801abf705e89ae65f6257df6b7931d37846a193ef2e8cdcbe",
+      "version": "2.5.0",
+      "licenses": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.expat.txt"
+    },
+    "libedit": {
+      "url": "https://thrysoee.dk/editline/libedit-20210910-3.1.tar.gz",
+      "sha256": "6792a6a992050762edcca28ff3318cdb7de37dccf7bc30db59fcd7017eed13c5",
+      "version": "20210910-3.1",
+      "licenses": [
+        "BSD-3-Clause"
+      ],
+      "license_file": "LICENSE.libedit.txt"
+    },
+    "libffi-3.3": {
+      "url": "https://github.com/libffi/libffi/releases/download/v3.3/libffi-3.3.tar.gz",
+      "sha256": "72fba7922703ddfa7a028d513ac15a85c8d54c8d67f55fa5a4802885dc652056",
+      "version": "3.3",
+      "licenses": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.libffi.txt"
+    },
+    "libffi": {
+      "url": "https://github.com/libffi/libffi/releases/download/v3.4.6/libffi-3.4.6.tar.gz",
+      "sha256": "b0dea9df23c863a7a50e825440f3ebffabd65df1497108e5d437747843895a4e",
+      "version": "3.4.6",
+      "licenses": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.libffi.txt"
+    },
+    "libX11": {
+      "url": "https://www.x.org/archive/individual/lib/libX11-1.6.12.tar.gz",
+      "sha256": "0fce5fc0a24a3dc728174eccd0cb8d6a1b37a2ec1654bd5628c84e5bc200d594",
+      "version": "1.6.12",
+      "licenses": [
+        "MIT",
+        "X11"
+      ],
+      "license_file": "LICENSE.libX11.txt"
+    },
+    "libXau": {
+      "url": "https://www.x.org/releases/individual/lib/libXau-1.0.11.tar.gz",
+      "sha256": "3a321aaceb803577a4776a5efe78836eb095a9e44bbc7a465d29463e1a14f189",
+      "version": "1.0.11",
+      "licenses": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.libXau.txt"
+    },
+    "libxcb": {
+      "url": "https://xcb.freedesktop.org/dist/libxcb-1.14.tar.gz",
+      "sha256": "2c7fcddd1da34d9b238c9caeda20d3bd7486456fc50b3cc6567185dbd5b0ad02",
+      "version": "1.14",
+      "licenses": [
+        "MIT"
+      ],
+      "license_file": "LICENSE.libxcb.txt"
+    },
+    "mpdecimal": {
+      "url": "https://www.bytereef.org/software/mpdecimal/releases/mpdecimal-2.5.1.tar.gz",
+      "sha256": "9f9cd4c041f99b5c49ffb7b59d9f12d95b683d88585608aa56a6307667b2b21f",
+      "version": "2.5.1",
+      "licenses": [
+        "BSD-2-Clause"
+      ],
+      "license_file": "LICENSE.mpdecimal.txt"
+    },
+    "ncurses": {
+      "url": "https://ftp.gnu.org/pub/gnu/ncurses/ncurses-6.5.tar.gz",
+      "sha256": "136d91bc269a9a5785e5f9e980bc76ab57428f604ce3e5a5a90cebc767971cc6",
+      "version": "6.5",
+      "licenses": [
+        "X11"
+      ],
+      "license_file": "LICENSE.ncurses.txt"
+    },
+    "openssl-3.0": {
+      "url": "https://www.openssl.org/source/openssl-3.0.14.tar.gz",
+      "sha256": "eeca035d4dd4e84fc25846d952da6297484afa0650a6f84c682e39df3a4123ca",
+      "version": "3.0.14",
+      "licenses": [
+        "Apache-2.0"
+      ],
+      "license_file": "LICENSE.openssl-3.txt"
+    },
+    "sqlite": {
+      "url": "https://www.sqlite.org/2024/sqlite-autoconf-3460000.tar.gz",
+      "sha256": "6f8e6a7b335273748816f9b3b62bbdc372a889de8782d7f048c653a447417a7d",
+      "version": "3460000",
+      "licenses": [],
+      "license_file": "LICENSE.sqlite.txt"
+    },
+    "tcl": {
+      "url": "https://prdownloads.sourceforge.net/tcl/tcl8.6.12-src.tar.gz",
+      "sha256": "26c995dd0f167e48b11961d891ee555f680c175f7173ff8cb829f4ebcde4c1a6",
+      "version": "8.6.12",
+      "licenses": [
+        "TCL"
+      ],
+      "license_file": "LICENSE.tcl.txt"
+    },
+    "tix": {
+      "url": "https://github.com/python/cpython-source-deps/archive/tix-8.4.3.6.tar.gz",
+      "sha256": "f7b21d115867a41ae5fd7c635a4c234d3ca25126c3661eb36028c6e25601f85e",
+      "version": "8.4.3.6",
+      "licenses": [
+        "TCL"
+      ],
+      "license_file": "LICENSE.tix.txt"
+    },
+    "tk": {
+      "url": "https://prdownloads.sourceforge.net/tcl/tk8.6.12-src.tar.gz",
+      "sha256": "12395c1f3fcb6bed2938689f797ea3cdf41ed5cb6c4766eec8ac949560310630",
+      "version": "8.6.12",
+      "licenses": [
+        "TCL"
+      ],
+      "license_file": "LICENSE.tcl.txt"
+    },
+    "uuid": {
+      "url": "https://sourceforge.net/projects/libuuid/files/libuuid-1.0.3.tar.gz",
+      "sha256": "46af3275291091009ad7f1b899de3d0cea0252737550e7919d17237997db5644",
+      "version": "1.0.3",
+      "licenses": [
+        "BSD-3-Clause"
+      ],
+      "license_file": "LICENSE.libuuid.txt"
+    },
+    "xz": {
+      "url": "https://github.com/indygreg/python-build-standalone/releases/download/20240224/xz-5.2.12.tar.gz",
+      "sha256": "61bda930767dcb170a5328a895ec74cab0f5aac4558cdda561c83559db582a13",
+      "version": "5.2.12",
+      "licenses": [],
+      "license_file": "LICENSE.liblzma.txt"
+    },
+    "zlib": {
+      "url": "https://github.com/madler/zlib/releases/download/v1.2.13/zlib-1.2.13.tar.gz",
+      "sha256": "b3a24de97a8fdbc835b9833169501030b8977031bcb54b3b3ac13740f846ab30",
+      "version": "1.2.13",
+      "licenses": [
+        "Zlib"
+      ],
+      "license_file": "LICENSE.zlib.txt"
+    }
+  }
+}

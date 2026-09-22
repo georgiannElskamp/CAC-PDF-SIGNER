@@ -30,7 +30,7 @@ def bridge_call(bridge, request, timeout=180):
         input=struct.pack("<I", len(payload)) + payload,
         capture_output=True,
         timeout=timeout,
-        creationflags=subprocess.CREATE_NO_WINDOW,
+        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
     )
     if proc.returncode or len(proc.stdout) < 4:
         raise RuntimeError("Windows signing bridge did not respond.")

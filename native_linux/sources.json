@@ -1,0 +1,8 @@
+[
+  {"file":"libusb-1.0.30.tar.bz2","url":"https://github.com/libusb/libusb/releases/download/v1.0.30/libusb-1.0.30.tar.bz2","sha256":"fea36f34f9156400209595e300840767ab1a385ede1dc7ee893015aea9c6dbaf"},
+  {"file":"zlib-1.3.2.tar.xz","url":"https://github.com/madler/zlib/releases/download/v1.3.2/zlib-1.3.2.tar.xz","sha256":"d7a0654783a4da529d1bb793b7ad9c3318020af77667bcae35f95d0e42a792f3"},
+  {"file":"openssl-3.5.8.tar.gz","url":"https://github.com/openssl/openssl/releases/download/openssl-3.5.8/openssl-3.5.8.tar.gz","sha256":"a8f84a39918ec6415ce765d9b429d313ba97b8143169c172e734b9514464f5b2"},
+  {"file":"pcsc-lite-2.5.2.tar.xz","url":"https://pcsclite.apdu.fr/files/pcsc-lite-2.5.2.tar.xz","sha256":"60a08942d8c00a1d86a3bf4c64eddbf7a5569c7c54f6904e3f07801bb5316acd"},
+  {"file":"ccid-1.8.4.tar.xz","url":"https://ccid.apdu.fr/files/ccid-1.8.4.tar.xz","sha256":"4ff98151a7feb828a711e2f9d68c6b6065a97c597a81c2cbbd11d7f7edcfe743"},
+  {"file":"opensc-0.27.1.tar.gz","url":"https://github.com/OpenSC/OpenSC/releases/download/0.27.1/opensc-0.27.1.tar.gz","sha256":"976f4a23eaf3397a1a2c3a7aac80bf971a8c3d829c9a79f06145bfaeeae5eca7"}
+]

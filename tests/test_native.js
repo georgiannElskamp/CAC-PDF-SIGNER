@@ -5,13 +5,14 @@ const path = require("path");
 function script(name) {
   return fs.readFileSync(path.join(__dirname, "../plugin", name), "utf8");
 }
-function harness(name) {
+function harness(name, location, platform = "Win32") {
   const handlers = {},
     timers = new Map(),
     sent = [];
   let sequence = 0;
   const context = {
     URL,
+    navigator: { platform },
     console,
     queueMicrotask: (fn) => {
       timers.set(++sequence, fn);
@@ -59,6 +60,7 @@ function harness(name) {
   if (name === "native-host.js")
     context.location.href =
       "onlyoffice://plugin/file:///C:/Apps/plugin/native.html";
+  if (location) context.location.href = location;
   vm.runInNewContext(script(name), context);
   return { context, handlers, timers, sent, frame };
 }
@@ -151,6 +153,22 @@ function hostTest() {
   });
   crash.context.process.onprocess(2, "");
   assert.match(crash.sent.at(-1).result.error, /stopped before completion/);
+  for (const [location, platform, expected] of [
+    ["onlyoffice://plugin/file:///tmp/Test%20Folder/plugin/native.html", "Linux x86_64",
+      '/bin/sh "/tmp/Test Folder/plugin/launch-linux.sh"'],
+    ["onlyoffice://plugin//tmp/Test%20Folder/plugin/native.html", "Linux aarch64",
+      '/bin/sh "/tmp/Test Folder/plugin/launch-linux.sh"'],
+    ["onlyoffice://plugin/file:///tmp/test%24%28echo%20bad%29/plugin/native.html", "Linux x86_64",
+      '/bin/sh "/tmp/test$(echo bad)/plugin/launch-linux.sh"'],
+  ]) {
+    const platformHost = harness("native-host.js", location, platform);
+    platformHost.handlers.message({ ...event, source: platformHost.context.parent });
+    assert.equal(platformHost.context.process.command, expected);
+  }
+  const spacedWindows = harness("native-host.js", "onlyoffice://plugin/file:///C:/Test%20Folder/plugin/native.html");
+  spacedWindows.handlers.message({ ...event, source: spacedWindows.context.parent });
+  assert.equal(spacedWindows.context.process, undefined);
+  assert.match(spacedWindows.sent.at(-1).result.error, /paths containing spaces/);
 }
 async function backgroundTest() {
   let click, finish;
@@ -164,7 +182,7 @@ async function backgroundTest() {
       Common: { UI: { warning: (value) => errors.push(value) } },
       AscDesktopEditor: { _openExternalReference: (path) => opened.push(path) },
     },
-    Asc: { plugin: {} },
+    Asc: { plugin: { info: { editorType: "word", editorSubType: "pdf" } } },
     btoa: (value) => Buffer.from(value, "binary").toString("base64"),
     CACNativeClient: () => ({
       call: (request) => {

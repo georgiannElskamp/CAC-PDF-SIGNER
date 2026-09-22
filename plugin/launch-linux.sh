@@ -1,0 +1,16 @@
+#!/bin/sh
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+case "$(uname -m)" in
+    x86_64) architecture=linux-x86_64 ;;
+    aarch64|arm64) architecture=linux-aarch64 ;;
+    *) printf '%s\n' '{"event":"result","ok":false,"error":"This Linux CPU architecture is not supported by the package."}'; exit 1 ;;
+esac
+worker="$root/native/$architecture/cac-signer"
+if [ ! -f "$worker" ]; then
+    printf '%s\n' '{"event":"result","ok":false,"error":"This package does not include a signing runtime for this Linux CPU architecture."}'
+    exit 1
+fi
+# Plugin extraction does not preserve Unix executable permissions in every editor build.
+chmod u+x -- "$worker"
+exec "$worker"

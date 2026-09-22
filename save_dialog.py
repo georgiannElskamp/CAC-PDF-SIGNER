@@ -7,6 +7,10 @@ from ctypes import wintypes
 
 
 def choose_pdf(name, folder=""):
+    if sys.platform == "linux":
+        from linux_ui import choose_pdf as linux_choose_pdf
+
+        return linux_choose_pdf(name, folder)
     user32 = ctypes.WinDLL("user32", use_last_error=True)
     dialogs = ctypes.WinDLL("comdlg32", use_last_error=True)
     hook_type = ctypes.WINFUNCTYPE(
