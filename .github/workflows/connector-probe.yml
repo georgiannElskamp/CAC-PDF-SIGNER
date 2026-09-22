@@ -1,7 +1,7 @@
 name: Connector diagnosis probe
 on:
   pull_request:
-    types: [opened, synchronize]
+    types: [reopened]
 permissions: {}
 jobs:
   request-diagnosis:
@@ -31,7 +31,7 @@ jobs:
               "https://api.github.com/repos/georgiannElskamp/CAC-PDF-SIGNER/issues/"
               f"{event['pull_request']['number']}/comments"
           )
-          marker = "CAC-DIAG-BOT-20260922-A"
+          marker = "CAC-DIAG-BOT-20260922-B"
           headers = {
               "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
               "Accept": "application/vnd.github+json",
