@@ -1,0 +1,184 @@
+name: ONLYOFFICE compatibility
+run-name: ONLYOFFICE ${{ inputs.editor_tag || 'latest stable' }} compatibility
+on:
+  workflow_dispatch:
+    inputs:
+      editor_tag:
+        description: Official stable Desktop Editors tag (blank selects latest)
+        type: string
+        default: ''
+permissions:
+  contents: read
+concurrency:
+  group: compatibility-${{ inputs.editor_tag || 'latest' }}
+  cancel-in-progress: false
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      editor_tag: ${{ steps.resolve.outputs.editor_tag }}
+      plugin_version: ${{ steps.resolve.outputs.plugin_version }}
+      source_commit: ${{ steps.resolve.outputs.source_commit }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Resolve official assets and verify approved plugin
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EDITOR_TAG: ${{ inputs.editor_tag }}
+        run: python3 -B tools/automation.py prepare --tag "$EDITOR_TAG" --output "$RUNNER_TEMP/input"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: compatibility-input
+          path: ${{ runner.temp }}/input
+          retention-days: 14
+          if-no-files-found: error
+  source:
+    uses: ./.github/workflows/checks.yml
+  package-audit:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: ${{ needs.prepare.outputs.source_commit }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: compatibility-input
+          path: ${{ runner.temp }}/input
+      - name: Audit original release against its immutable source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PLUGIN_VERSION: ${{ needs.prepare.outputs.plugin_version }}
+        run: |
+          mkdir release
+          cp "$RUNNER_TEMP/input/CAC-PDF-Signer.plugin" release/
+          gh release download "v$PLUGIN_VERSION" --pattern SHA256SUMS.txt --pattern INSTALL.txt --dir release
+          python3 -B tools/audit_public.py
+  desktop:
+    needs: [prepare, package-audit]
+    timeout-minutes: 35
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: compatibility-input
+          path: ${{ runner.temp }}/input
+      - name: Prepare Linux display
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth libgbm1
+      - name: Test shipped worker
+        id: runtime
+        run: python -B tools/verify_package.py "$RUNNER_TEMP/input/CAC-PDF-Signer.plugin"
+      - name: Test new editor installation
+        id: editor
+        continue-on-error: true
+        env:
+          PLUGIN_VERSION: ${{ needs.prepare.outputs.plugin_version }}
+        run: |
+          command=(python -B tests/editor_ci.py "$RUNNER_TEMP/input/CAC-PDF-Signer.plugin" --manifest "$RUNNER_TEMP/input/editor.json" --plugin-version "$PLUGIN_VERSION")
+          if [[ "$RUNNER_OS" == Linux ]]; then xvfb-run -a "${command[@]}"; else "${command[@]}"; fi
+      - name: Test approved editor as a failure control
+        id: baseline
+        if: steps.editor.outcome == 'failure'
+        continue-on-error: true
+        env:
+          PLUGIN_VERSION: ${{ needs.prepare.outputs.plugin_version }}
+        run: |
+          command=(python -B tests/editor_ci.py "$RUNNER_TEMP/input/CAC-PDF-Signer.plugin" --plugin-version "$PLUGIN_VERSION")
+          if [[ "$RUNNER_OS" == Linux ]]; then xvfb-run -a "${command[@]}"; else "${command[@]}"; fi
+      - name: Record outcomes
+        if: always()
+        env:
+          TEST_STEPS: ${{ toJSON(steps) }}
+          PLATFORM: ${{ matrix.os }}
+        run: python -B tools/automation.py result "$RUNNER_TEMP/report" "$PLATFORM"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: compatibility-${{ matrix.os }}
+          path: ${{ runner.temp }}/report
+          retention-days: 14
+          if-no-files-found: error
+      - name: Require candidate editor pass
+        if: steps.editor.outcome != 'success'
+        run: exit 1
+  simulation:
+    needs: [prepare, package-audit]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: compatibility-input
+          path: ${{ runner.temp }}/input
+      - name: Sign with a disposable software token
+        id: signing
+        run: bash tests/linux/run-container.sh "$RUNNER_TEMP/input" "$RUNNER_TEMP/report"
+      - name: Record outcomes
+        if: always()
+        env:
+          TEST_STEPS: ${{ toJSON(steps) }}
+        run: python3 -B tools/automation.py result "$RUNNER_TEMP/report" simulation
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: compatibility-simulation
+          path: |
+            ${{ runner.temp }}/report/result-simulation.json
+            ${{ runner.temp }}/report/signing-result.json
+            ${{ runner.temp }}/report/signed-preview.png
+          retention-days: 14
+          if-no-files-found: error
+  report:
+    needs: [prepare, source, package-audit, desktop, simulation]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          pattern: compatibility-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/reports
+      - name: Update compatibility issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREREQUISITES: '{"source":"${{ needs.source.result }}","package":"${{ needs.package-audit.result }}"}'
+        run: python3 -B tools/automation.py report "$RUNNER_TEMP/reports"
+      - name: Require source and package checks
+        env:
+          SOURCE: ${{ needs.source.result }}
+          PACKAGE: ${{ needs.package-audit.result }}
+        run: test "$SOURCE" = success && test "$PACKAGE" = success

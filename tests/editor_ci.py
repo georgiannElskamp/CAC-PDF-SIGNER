@@ -13,6 +13,9 @@ import sys
 import tempfile
 import urllib.request
 
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
+from automation import download, validate_manifest
+
 
 def stop_windows_editor(directory):
     import _winapi
@@ -65,22 +68,21 @@ def stop_windows_editor(directory):
             _winapi.CloseHandle(handle)
 
 
-def check(package):
+def check(package, manifest=None, plugin_version=None):
     if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted":
         raise RuntimeError("This installer is restricted to disposable GitHub-hosted runners.")
     if sys.platform not in ("win32", "linux") or platform.machine().lower() not in ("amd64", "x86_64"):
         raise RuntimeError("The editor installation test requires Windows or Linux x64.")
     root = Path(__file__).resolve().parents[1]
-    config = json.loads((root / "tests/editor-installers.json").read_text())
+    config = validate_manifest(json.loads((manifest or root / "tests/editor-installers.json").read_text()))
     pin = config["windows" if sys.platform == "win32" else "linux"]
-    version = json.loads((root / "plugin/config.json").read_text())["version"]
+    version = plugin_version or json.loads((root / "plugin/config.json").read_text())["version"]
     with tempfile.TemporaryDirectory(prefix="cac-editor-") as temporary:
         work = Path(temporary)
         installer = work / pin["file"]
         url = f"https://github.com/ONLYOFFICE/DesktopEditors/releases/download/v{config['version']}/{pin['file']}"
-        urllib.request.urlretrieve(url, installer)
-        if hashlib.sha256(installer.read_bytes()).hexdigest() != pin["sha256"]:
-            raise ValueError("The editor installer checksum differs from the pinned release.")
+        download(url, installer, pin["sha256"])
+        print(f"Editor v{config['version']}; installer SHA-256 {pin['sha256']}; plugin {version}", flush=True)
         environment = dict(os.environ)
         if sys.platform == "win32":
             subprocess.run([str(installer), "/VERYSILENT", "/SP-", "/SUPPRESSMSGBOXES", "/NORESTART", "/TASKS="], check=True, timeout=300)
@@ -132,4 +134,7 @@ def check(package):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("package", type=Path)
-    check(parser.parse_args().package)
+    parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--plugin-version")
+    args = parser.parse_args()
+    check(args.package, args.manifest, args.plugin_version)

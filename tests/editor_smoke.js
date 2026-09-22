@@ -78,13 +78,16 @@ async function smoke(port, packagePath, version) {
     context = await until(async () => {
       for (const id of contexts) {
         try {
-          if (await evaluate(id, "typeof PDFE !== 'undefined' && typeof Asc !== 'undefined' && !!Asc.editor?.jf?.file?.Mp")) return id;
+          if (await evaluate(id, "typeof PDFE !== 'undefined' && typeof Asc !== 'undefined' && !!Asc.editor && typeof AscDesktopEditor !== 'undefined'")) return id;
         } catch (error) {
           if (!/context.*(find|destroy)|find.*context/i.test(error.message)) throw error;
         }
       }
       return null;
-    }, "The tested PDF editor interface is unavailable.");
+    }, "The PDF editor context is unavailable (startup or harness failure).");
+    progress("adapter interface discovery");
+    assert.equal(await run(() => !!Asc.editor?.jf?.file?.Mp && typeof Asc.editor.jf.Qd === "function"), true,
+      "Unsupported PDF interface: inspect both the plugin adapter and test harness before diagnosing compatibility.");
     assert.equal(await run((guid) => JSON.parse(AscDesktopEditor.GetInstallPlugins()).some((g) => (g.pluginsData || []).some((p) => p.guid === guid)), GUID), false,
       "CAC is already installed. Use a disposable profile.");
     const initial = await until(() => run(() => {
