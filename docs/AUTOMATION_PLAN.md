@@ -25,7 +25,7 @@ Approved design: GitHub-hosted execution only. The desktop may be powered off. O
 - [x] Unit checks reject incomplete/mismatched release metadata, preserve uncertain dispatch intent and suppress duplicate dispatches.
 - [x] Both repositories have zero self-hosted runners; no desktop automation was created.
 - [x] Simulated GUI signing, Save As cancellation/retry, independent signature verification and signed-field reopening [pass](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/actions/runs/35768964456).
-- [ ] Add the scheduler's APP_ID variable and APP_PRIVATE_KEY secret, then enable and exercise Discovery and Scheduler health.
+- [x] Scheduler App credentials are configured and daily monitoring is enabled. [Discovery](https://github.com/georgiannElskamp/cac-pdf-signer-automation/actions/runs/35771546090) and [Scheduler health](https://github.com/georgiannElskamp/cac-pdf-signer-automation/actions/runs/35771665985) pass.
 - [x] Required PR checks pass; a regression test proves published versions are rejected before any release write.
 - [ ] Configure an OpenAI API key and usage controls if optional diagnosis is wanted.
 
