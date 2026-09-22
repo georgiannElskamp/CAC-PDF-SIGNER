@@ -1,5 +1,9 @@
 import unittest
 from unittest.mock import patch
+import hashlib
+import json
+from pathlib import Path
+import tempfile
 import prepare_release
 
 
@@ -24,3 +28,21 @@ class HostedReleaseTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 prepare_release.inspect("../../other")
             api.assert_not_called()
+
+    def test_published_version_is_rejected_without_any_write(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, candidate = root / "source", root / "candidate"
+            (source / "plugin").mkdir(parents=True)
+            candidate.mkdir()
+            (source / "plugin/config.json").write_text(json.dumps({"version": "1.2.3"}))
+            package = b"synthetic candidate bytes"
+            (candidate / "CAC-PDF-Signer.plugin").write_bytes(package)
+            (candidate / "metadata.json").write_text(json.dumps({"candidate": True, "plugin": {
+                "tag": "v1.2.3", "commit": "a" * 40, "sha256": hashlib.sha256(package).hexdigest()}}))
+            with patch.object(prepare_release, "api", return_value={"draft": False}) as api, \
+                 patch.object(prepare_release.subprocess, "run") as command:
+                with self.assertRaisesRegex(ValueError, "already published"):
+                    prepare_release.stage(source, candidate, "a" * 40)
+                api.assert_called_once_with(f"/repos/{prepare_release.REPOSITORY}/releases/tags/v1.2.3")
+                command.assert_not_called()
