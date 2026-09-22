@@ -24,9 +24,9 @@ Approved design: GitHub-hosted execution only. The desktop may be powered off. O
 - [x] Component watcher creates one report issue and identifies current Python/SDK review items.
 - [x] Unit checks reject incomplete/mismatched release metadata, preserve uncertain dispatch intent and suppress duplicate dispatches.
 - [x] Both repositories have zero self-hosted runners; no desktop automation was created.
-- [ ] Finish the simulated GUI Save As/reopen validation.
+- [x] Simulated GUI signing, Save As cancellation/retry, independent signature verification and signed-field reopening [pass](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/actions/runs/35768964456).
 - [ ] Add the scheduler's APP_ID variable and APP_PRIVATE_KEY secret, then enable and exercise Discovery and Scheduler health.
-- [ ] Validate required PR checks and the release-staging refusal for an already-published version.
+- [x] Required PR checks pass; a regression test proves published versions are rejected before any release write.
 - [ ] Configure an OpenAI API key and usage controls if optional diagnosis is wanted.
 
 The released plugin is unchanged. Test containers, token databases and generated keys remain disposable CI data. Retained artifacts include only allowlisted reports, synthetic previews and candidate packages.
