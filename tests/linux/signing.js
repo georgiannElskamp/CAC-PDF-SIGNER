@@ -63,7 +63,7 @@ async function main() {
         catch(e){if(!/context.*(find|destroy)|find.*context/i.test(e.message))throw e;}
       }
     },"PDF context missing");
-    await until(()=>run(()=>Asc.editor.jf.file.Mp.getInteractiveFormsInfo()?.Fields?.length===1),"Fixture field missing");
+    await until(()=>run(()=>Asc.editor.jf?.file?.Mp?.getInteractiveFormsInfo()?.Fields?.length===1),"Fixture field missing");
     assert.equal(await run(()=>AscDesktopEditor.LocalFileGetSourcePath()),source);
     assert.equal(await run(guid=>JSON.parse(AscDesktopEditor.GetInstallPlugins()).some(g=>(g.pluginsData||[]).some(p=>p.guid===guid)),GUID),false);
     console.log("Installing unchanged published plugin");
@@ -160,4 +160,3 @@ async function main() {
   }
 }
 main().catch(error=>{console.error(error.stack);process.exitCode=1;});
-

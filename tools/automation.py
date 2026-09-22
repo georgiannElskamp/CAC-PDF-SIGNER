@@ -114,7 +114,7 @@ def combination(manifest, approved, harness):
     return hashlib.sha256(json.dumps(values, sort_keys=True).encode()).hexdigest()
 
 
-def prepare(tag, output):
+def prepare(tag, output, expected=""):
     output.mkdir(parents=True, exist_ok=True)
     approved = json.loads((ROOT / "tests/approved-plugin.json").read_text())
     manifest = resolve_editor(tag)
@@ -131,6 +131,8 @@ def prepare(tag, output):
     (output / "editor.json").write_text(json.dumps(manifest, indent=2) + "\n")
     metadata = {"editor": manifest, "plugin": approved, "harness": os.environ["GITHUB_SHA"],
                 "combination": combination(manifest, approved, os.environ["GITHUB_SHA"])}
+    if expected and expected != metadata["combination"]:
+        raise ValueError("Release assets or harness changed after discovery; rediscover before testing")
     (output / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
     with open(os.environ["GITHUB_OUTPUT"], "a") as stream:
         stream.write(f"editor_tag=v{manifest['version']}\nplugin_version={approved['tag'][1:]}\nsource_commit={approved['commit']}\n")
@@ -213,6 +215,7 @@ if __name__ == "__main__":
     prepare_parser = sub.add_parser("prepare")
     prepare_parser.add_argument("--tag", default="")
     prepare_parser.add_argument("--output", type=Path, required=True)
+    prepare_parser.add_argument("--expected", default="")
     report_parser = sub.add_parser("report")
     report_parser.add_argument("directory", type=Path)
     result_parser = sub.add_parser("result")
@@ -220,7 +223,7 @@ if __name__ == "__main__":
     result_parser.add_argument("platform", choices=["windows-2025", "ubuntu-24.04", "simulation"])
     args = parser.parse_args()
     if args.command == "prepare":
-        prepare(args.tag, args.output)
+        prepare(args.tag, args.output, args.expected)
     elif args.command == "report":
         report(args.directory)
     else:

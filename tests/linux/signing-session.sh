@@ -5,7 +5,7 @@ export QT_QPA_PLATFORM=xcb GDK_BACKEND=x11
 mkdir -p "$HOME/Documents"
 cleanup() {
     [[ -z ${editor_pid:-} ]] || kill "$editor_pid" 2>/dev/null || true
-    rm -rf /test/tokens /test/state/*
+    rm -rf /test/tokens/* /test/state/*
 }
 trap cleanup EXIT
 printf 'directories.tokendir = /test/tokens\nobjectstore.backend = file\nlog.level = ERROR\n' > "$SOFTHSM2_CONF"

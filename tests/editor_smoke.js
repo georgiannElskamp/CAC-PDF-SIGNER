@@ -86,7 +86,7 @@ async function smoke(port, packagePath, version) {
       return null;
     }, "The PDF editor context is unavailable (startup or harness failure).");
     progress("adapter interface discovery");
-    assert.equal(await run(() => !!Asc.editor?.jf?.file?.Mp && typeof Asc.editor.jf.Qd === "function"), true,
+    await until(() => run(() => !!Asc.editor?.jf?.file?.Mp && typeof Asc.editor.jf.Qd === "function"),
       "Unsupported PDF interface: inspect both the plugin adapter and test harness before diagnosing compatibility.");
     assert.equal(await run((guid) => JSON.parse(AscDesktopEditor.GetInstallPlugins()).some((g) => (g.pluginsData || []).some((p) => p.guid === guid)), GUID), false,
       "CAC is already installed. Use a disposable profile.");

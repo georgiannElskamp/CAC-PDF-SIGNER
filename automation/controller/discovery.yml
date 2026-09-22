@@ -1,0 +1,43 @@
+name: Discovery
+on:
+  schedule:
+    - cron: '23 8 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Retest completed combinations once
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: scheduler-state
+  cancel-in-progress: false
+jobs:
+  discover:
+    if: vars.AUTOMATION_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/create-github-app-token@fee1f7d63c2ff003460e3d139729b119787bc349 # v2
+        id: app
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: georgiannElskamp
+          repositories: CAC-PDF-SIGNER
+          permission-actions: write
+      - name: Discover and reconcile
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DISPATCH_TOKEN: ${{ steps.app.outputs.token }}
+          FORCE: ${{ inputs.force }}
+        run: |
+          args=()
+          if [[ "$FORCE" == true ]]; then args+=(--force); fi
+          python3 -B watch.py watch "${args[@]}"

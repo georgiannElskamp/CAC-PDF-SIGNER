@@ -1,10 +1,14 @@
 name: ONLYOFFICE compatibility
-run-name: ONLYOFFICE ${{ inputs.editor_tag || 'latest stable' }} compatibility
+run-name: ONLYOFFICE ${{ inputs.editor_tag || 'latest stable' }} compatibility ${{ inputs.request_id }}
 on:
   workflow_dispatch:
     inputs:
       editor_tag:
         description: Official stable Desktop Editors tag (blank selects latest)
+        type: string
+        default: ''
+      request_id:
+        description: Discovery fingerprint (leave blank for a manual test)
         type: string
         default: ''
 permissions:
@@ -29,7 +33,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EDITOR_TAG: ${{ inputs.editor_tag }}
-        run: python3 -B tools/automation.py prepare --tag "$EDITOR_TAG" --output "$RUNNER_TEMP/input"
+          EXPECTED: ${{ inputs.request_id }}
+        run: python3 -B tools/automation.py prepare --tag "$EDITOR_TAG" --expected "$EXPECTED" --output "$RUNNER_TEMP/input"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: compatibility-input
