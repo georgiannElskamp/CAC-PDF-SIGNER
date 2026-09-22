@@ -18,9 +18,25 @@ python -B tools/verify_package.py release/CAC-PDF-Signer.plugin
 
 To run the editor smoke test elsewhere, use a disposable OS account or Linux XDG profile. Generate its only PDF with `node tests/editor_smoke.js --fixture <pdf-path>`, open it in ONLYOFFICE with `--remote-debugging-port=9251`, then run `node tests/editor_smoke.js --disposable-profile 9251 <absolute-plugin-path> <version>`. The tool refuses an existing CAC installation and other PDF fields. Close the test editor afterward; remote debugging should not be enabled during normal signing.
 
-## Current candidate
+## Current release
 
-Version 0.7.0-rc.6 retains the rc.2 signing code and corrects draft-asset access, Linux editor launch and Windows test-process cleanup in the release workflow. Its source, packaged-worker and editor-installation results are recorded by GitHub Actions. The local rc.2 checks below establish the previous baseline; hardware signing is still pending for this candidate.
+Version 0.7.0-rc.6 was accepted for release on 2026-09-22. Its artifact and version label are unchanged from the tested candidate. It retains the rc.2 signing code and corrects draft-asset access, Linux editor launch and Windows test-process cleanup in the release workflow.
+
+| Check | Result |
+| --- | --- |
+| Release workflow | Windows/Linux source, packaged-worker and fresh-editor installation checks [passed](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/actions/runs/35749846160). |
+| Physical CAC on Windows | The maintainer reports successful validation of the published plugin on two additional Windows installations. Reader and middleware details were not recorded. |
+| Fresh Debian 12 x86_64 | Official ONLYOFFICE 9.4.0, ordinary user, profile and save paths containing spaces and an accented character: install, Background plugins listing, startup, disable, uninstall and reinstall pass. |
+| Simulated card signing on Debian 12 | Native PIN prompt, existing signature field, certificate text, Save As, cancellation/recovery without another PIN, and reopening the saved PDF pass. Poppler independently verifies the signature; the original PDF remains unchanged. |
+| Bundled Linux reader | Starts without system OpenSC or PC/SC packages and correctly reports no connected eligible card. Physical reader signing remains unverified. |
+
+The Debian test used a separate disposable WSL installation, with Windows drive automount and Windows process interoperability disabled. The plugin used its bundled signing runtime; existing WSL distributions were not used. The temporary installation, software token and all its test files were removed afterward.
+
+ONLYOFFICE required the Linux graphics package `libgbm1` before it could start. Debian's stock SoftHSM provider required a newer C++ runtime than the plugin bundles, so a compatible test provider was built with its C++ runtime statically linked. No plugin files were modified. These results do not establish compatibility with arbitrary PKCS#11 providers, physical Linux readers or every distribution. The maintainer accepted these Linux validation limits for this release.
+
+Tested plugin SHA-256: `e0af01f17b70c30efe4790ef01aa51c7b9105ba1c3a00d2e5f98f0a876b8f3e7`.
+
+The following tables record earlier checks; they are not additional tests of the final artifact.
 
 ### 0.7.0-rc.2 baseline
 
@@ -51,21 +67,21 @@ The following portability checks passed with the local rc.1 candidate. Their cov
 
 An earlier published build was validated on one Windows desktop and installed on a second. Earlier Linux signing used a software token. These results do not establish hardware compatibility across different readers and card middleware.
 
-## Desktop validation before a stable release
+## Checks for future releases
 
 - Install through Plugin Manager and enable **Background plugins > CAC PDF Signer**.
 - Sign an empty field with a connected CAC, save and reopen the PDF.
 - Verify the signature and inspect wide, narrow, shallow and rotated fields.
 - Cancel Save As, then retry without signing again.
-- Repeat under a profile containing spaces on the second Windows desktop.
-- Repeat on a normal, non-root Linux desktop with a physical CAC and reader.
+- Repeat under a profile containing spaces on another Windows desktop.
+- Test a normal, non-root Linux desktop with a physical CAC and reader when available; record whether results use hardware or a simulated card.
 
 Other ONLYOFFICE builds need adapter validation. ARM64 and musl builds are not supplied. Flatpak/Snap, RPM/AppImage installation, network installations, provider-specific PIN behavior and managed execution policies remain outside the validated matrix. A working ONLYOFFICE installation does not by itself establish permission to execute a plugin worker or access a USB reader.
 
 ## Publish
 
-Run `python -B tools/publish_release.py` to check the local package. Publish a stable release only after the desktop checks above; incomplete hardware validation must remain explicit in prerelease notes. See [build and release instructions](BUILDING.md).
+Run `python -B tools/publish_release.py` to check a newly prepared package. Record completed checks and untested configurations before publication. Hardware validation limits must remain explicit in release notes, including when the maintainer accepts them for release. See [build and release instructions](BUILDING.md).
 
-Publishing pushes the commit and version tag, uploads a draft release and dispatches the release workflow. GitHub runs Windows/Linux source tests, executes both uploaded native workers, tests installation in fresh editors and checks the package against the tagged source before publication. Versions containing a hyphen are prereleases. A failed workflow leaves the release in draft.
+Publishing pushes the commit and version tag, uploads a draft release and dispatches the release workflow. GitHub runs Windows/Linux source tests, executes both uploaded native workers, tests installation in fresh editors and checks the package against the tagged source before publication. Versions containing a hyphen are initially published as prereleases. A failed workflow leaves the release in draft. A validated candidate can subsequently be promoted in GitHub without changing its tag or assets.
 
 To retry an uploaded draft after a workflow failure, run **Actions > Publish release > Run workflow** with the same tag. Rebuild and use a new version if the source or package changes.

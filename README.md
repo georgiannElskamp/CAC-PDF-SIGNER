@@ -4,7 +4,7 @@ Sign existing PDF signature fields with a Common Access Card in ONLYOFFICE Deskt
 
 **[Download 0.7.0-rc.6](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/releases/tag/v0.7.0-rc.6)** · [Installation](docs/INSTALLATION.md) · [Validation status](docs/TESTING.md)
 
-This is a release candidate. Installation and startup have been tested on Windows and Linux; signing with this candidate still needs real CAC validation on the second Windows desktop and a Linux desktop.
+This is the current approved release. The published plugin has been verified with a physical CAC on two additional Windows installations and with a simulated card in fresh Debian 12. Physical CAC signing on Linux remains unverified. The `0.7.0-rc.6` version label is retained to preserve the exact tested artifact.
 
 ## Compatibility
 

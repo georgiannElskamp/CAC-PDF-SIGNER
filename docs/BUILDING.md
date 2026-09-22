@@ -47,4 +47,6 @@ python -B tools/publish_release.py --publish
 
 Publishing pushes the commit and version tag, uploads a draft and starts the release workflow. Publication requires Windows/Linux source tests, checks of both uploaded workers, installation tests in fresh editors, and an exact match between tagged source and packaged source. Editor installers and checksums are pinned in `tests/editor-installers.json`; they are test dependencies and are not shipped in the plugin.
 
-Versions containing a hyphen are prereleases. A failed check leaves the release in draft. Retry an unchanged draft through **Actions > Publish release > Run workflow** with its tag. If source or package content changes after tagging, use a new version and tag. Do not replace published assets or move release tags.
+Versions containing a hyphen are initially published as prereleases. A failed check leaves the release in draft. Retry an unchanged draft through **Actions > Publish release > Run workflow** with its tag. If source or package content changes after tagging, use a new version and tag. Do not replace published assets or move release tags.
+
+After validation, an existing candidate can be marked as the current release in GitHub while retaining its tag and assets. Record the completed validation and accepted limits in its release notes. Documentation updates on the default branch do not change the tagged source or the documentation embedded in that artifact.

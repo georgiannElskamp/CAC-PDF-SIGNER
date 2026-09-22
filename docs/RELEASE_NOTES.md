@@ -1,6 +1,8 @@
 # CAC PDF Signer 0.7.0-rc.6
 
-Portability release candidate; hardware validation remains in progress.
+Current approved release as of 2026-09-22. The tested plugin, checksum and version tag are unchanged.
+
+The maintainer verified the published plugin with a physical CAC on two additional Windows installations. A fresh Debian 12 x86_64 installation also passed simulated-card signing, visible signature rendering, native PIN and Save As dialogs, cancellation/recovery and independent PDF signature verification. Physical CAC signing on Linux remains unverified; this limitation is accepted for the current release.
 
 - Fixed Windows startup with spaces, Unicode and percent signs in profile paths. Existing short-name aliases also support long runtime paths.
 - Fixed valid extended Windows Save As paths and protected the source PDF against path aliases.
@@ -20,4 +22,6 @@ Install the single `CAC-PDF-Signer.plugin` through Plugin Manager, then enable *
 
 Requires ONLYOFFICE Desktop Editors 9.4.0.129, Windows x64 or Linux x86_64 with glibc 2.28+, GTK 3 and reader access. ARM64 and musl builds are not included. Sandboxed installations and network-hosted plugins remain unverified.
 
-Automated signing, runtime and editor-transport checks pass. Signing on the second Windows desktop, physical legacy CSP middleware and a Linux hardware CAC still need validation. See the [validation matrix](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/blob/v0.7.0-rc.6/docs/TESTING.md).
+Automated source, packaged-runtime and fresh-editor installation checks pass. The minimal Debian editor installation required `libgbm1`. The software-token test required a compatible provider build because the stock provider needed a newer C++ runtime than the plugin bundles; no plugin files changed. Physical legacy CSP middleware, Linux hardware CACs and arbitrary third-party providers remain unverified. See the [current validation matrix](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/blob/main/docs/TESTING.md).
+
+The `0.7.0-rc.6` label is retained so downloads remain byte-for-byte identical to the validated build. Documentation embedded in the archive records its original candidate status; these release notes and the current repository documentation record the subsequent validation and acceptance.

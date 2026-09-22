@@ -48,6 +48,7 @@ These files contain signed documents and identity details. Uninstalling the plug
 | Editor adapter update required | The installed editor differs from the tested PDF interface. Signing stops until an adapter is available. |
 | Worker is blocked or not executable | Check application-control rules, plugin ownership and filesystem execution permissions. |
 | Linux desktop unavailable | GTK 3 and a usable display must be accessible to the editor and its child processes. |
+| ONLYOFFICE itself fails to start with `libgbm.so.1` missing | Install the distribution's GBM graphics library (`libgbm1` on Debian). This is an editor dependency. |
 | Reader or certificate unavailable | Confirm the reader is connected and accessible to this OS account. Windows needs its card provider; Linux needs USB or system PC/SC access. |
 | Recovery folder cannot be written | Check permissions and free space before retrying. |
 | PDF must be reopened | Save changes and close/reopen the PDF so the editor loads the saved bytes. |
