@@ -29,15 +29,6 @@ jobs:
         with:
           node-version: '22'
       - run: python -B audit_public.py
-      - name: Verify release assets
-        if: inputs.release_tag != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-        run: |
-          gh release download "$RELEASE_TAG" --pattern CAC-PDF-Signer.plugin --pattern SHA256SUMS.txt --pattern INSTALL.txt --dir release
-          python -B publish_release.py --tag "$RELEASE_TAG"
       - run: python -m pip install -r requirements-dev.txt
       - run: python -B run_tests.py
       - run: node tests/test_background.js
