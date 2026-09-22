@@ -16,7 +16,7 @@ from pathlib import Path
 
 from runtime_config import MAX_PDF, state_directory
 
-VERSION = "0.5.1"
+VERSION = "0.5.2"
 MAX_REQUEST = MAX_PDF * 4 // 3 + 16384
 
 

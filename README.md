@@ -4,7 +4,7 @@ Sign PDF signature fields with a Common Access Card in ONLYOFFICE Desktop Editor
 
 ## Requirements
 
-- Windows x64 and ONLYOFFICE Desktop Editors 9.4.0.129.
+- Windows 10 or later, x64, and ONLYOFFICE Desktop Editors 9.4.0.129.
 - A CAC reader, Windows card middleware, and one eligible document-signing certificate on the connected card.
 - A plugin installation path without spaces. PDF filenames and save locations may contain spaces.
 
@@ -48,4 +48,4 @@ python -B audit_public.py
 
 ## License
 
-AGPL-3.0-only. See [LICENSE](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md), [security](SECURITY.md), and [release checks](docs/RELEASE_CHECKS.md).
+The project code is AGPL-3.0-only. Bundled dependencies retain their own licenses, including the Microsoft runtime redistribution conditions. See [LICENSE](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md), [security](SECURITY.md), and [release checks](docs/RELEASE_CHECKS.md).

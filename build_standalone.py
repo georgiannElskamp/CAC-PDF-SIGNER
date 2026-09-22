@@ -5,6 +5,7 @@ import hashlib
 import importlib.metadata
 import json
 import os
+import ssl
 import subprocess
 import sys
 import zipfile
@@ -26,10 +27,87 @@ ASSETS = (
     "native.html",
     "standalone-background.js",
 )
+REQUIRED_NOTICES = {
+    "pdf-sign-APACHE-2.0.txt",
+    "reportlab-BSD-3-Clause.txt",
+    "go-BSD-3-Clause.txt",
+    "go-x-sys-BSD-3-Clause.txt",
+    "openssl-3.0.13-APACHE-2.0.txt",
+    "openssl-4.0.2-APACHE-2.0.txt",
+    "microsoft-runtime-CPython.txt",
+}
+
+
+def native_licenses():
+    directory = ROOT / "licenses"
+    for name in REQUIRED_NOTICES:
+        if not (directory / name).is_file():
+            raise ValueError(f"Required license missing: {name}")
+    manifest = json.loads((directory / "manifest.json").read_text())
+    for item in manifest["files"]:
+        path = directory / item["file"]
+        if path.parent != directory or not path.is_file():
+            raise ValueError("Invalid license manifest entry.")
+        if hashlib.sha256(path.read_bytes()).hexdigest() != item["sha256"]:
+            raise ValueError(f"License checksum mismatch: {item['file']}")
+    return {
+        "licenses/" + path.relative_to(directory).as_posix(): path.read_bytes()
+        for path in sorted(directory.rglob("*"))
+        if path.is_file()
+    }
+
+
+def build_environment():
+    env = os.environ.copy()
+    env.pop("PYTHONHOME", None)
+    env.pop("PYTHONPATH", None)
+    base = Path(sys.base_prefix)
+    windows = Path(os.environ["SystemRoot"])
+    env["PATH"] = os.pathsep.join(
+        str(path)
+        for path in (Path(sys.executable).parent, base, base / "DLLs",
+                     windows / "System32", windows)
+    )
+    return env
+
+
+def verify_native(executable, bridge):
+    from PyInstaller.archive.readers import CArchiveReader
+
+    archive = CArchiveReader(str(executable))
+    base = Path(sys.base_prefix)
+    expected = {
+        "python3.dll": base / "python3.dll",
+        "python311.dll": base / "python311.dll",
+        "vcruntime140.dll": base / "vcruntime140.dll",
+        "libcrypto-3.dll": base / "DLLs/libcrypto-3.dll",
+        "libssl-3.dll": base / "DLLs/libssl-3.dll",
+        "libffi-8.dll": base / "DLLs/libffi-8.dll",
+    }
+    dlls = {name.lower(): name for name in archive.toc if name.lower().endswith(".dll")}
+    if set(dlls) != set(expected):
+        raise ValueError(
+            "Unreviewed native library inventory: "
+            f"extra={sorted(set(dlls) - set(expected))}, "
+            f"missing={sorted(set(expected) - set(dlls))}"
+        )
+    for name, path in expected.items():
+        if archive.extract(dlls[name]) != path.read_bytes():
+            raise ValueError(f"Bundled library differs from the Python runtime: {name}")
+    if archive.extract("pdfsign-bridge.exe") != bridge.read_bytes():
+        raise ValueError("Bundled bridge differs from the pinned release.")
 
 
 def licenses():
     """Collect dependency licenses for the release archive."""
+    from cryptography.hazmat.backends.openssl.backend import backend
+
+    if (
+        sys.version_info[:3] != (3, 11, 9)
+        or ssl.OPENSSL_VERSION.split()[1] != "3.0.13"
+        or backend.openssl_version_text().split()[1] != "4.0.2"
+    ):
+        raise ValueError("Runtime versions changed; update the native license inventory.")
     names = [
         line.split("==")[0]
         for line in (ROOT / "requirements-lock.txt").read_text().splitlines()
@@ -37,7 +115,7 @@ def licenses():
     ]
     names.append("pyinstaller")
     names.append("setuptools")
-    result = {}
+    result = native_licenses()
     for name in names:
         distribution = importlib.metadata.distribution(name)
         found = False
@@ -105,7 +183,8 @@ def build(destination, bridge, reuse_executable=False):
             "tzdata",
             str(ROOT / "standalone_worker.py"),
         ]
-        subprocess.run(command, cwd=destination, check=True)
+        subprocess.run(command, cwd=destination, env=build_environment(), check=True)
+    verify_native(executable, bridge)
     check = subprocess.run(
         [str(executable)],
         input='{"op":"health"}\n',
@@ -113,6 +192,7 @@ def build(destination, bridge, reuse_executable=False):
         capture_output=True,
         timeout=60,
         creationflags=subprocess.CREATE_NO_WINDOW,
+        env=build_environment(),
     )
     events = [json.loads(line) for line in check.stdout.splitlines()]
     if (
@@ -145,14 +225,6 @@ def build(destination, bridge, reuse_executable=False):
                 archive.write(path, "source/" + path.relative_to(ROOT).as_posix())
         for name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
             archive.write(ROOT / name, name)
-        archive.write(
-            ROOT / "licenses/pdf-sign-APACHE-2.0.txt",
-            "licenses/pdf-sign-APACHE-2.0.txt",
-        )
-        archive.write(
-            ROOT / "licenses/reportlab-BSD-3-Clause.txt",
-            "licenses/reportlab-BSD-3-Clause.txt",
-        )
         for name, content in notices.items():
             archive.writestr(name, content)
     with zipfile.ZipFile(target) as archive:

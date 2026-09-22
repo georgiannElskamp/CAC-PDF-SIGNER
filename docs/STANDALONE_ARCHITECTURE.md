@@ -15,7 +15,7 @@ Cancelling Save As preserves the signed recovery copy. A subsequent click on the
 
 ## Compatibility
 
-Tested with Windows x64 and ONLYOFFICE Desktop Editors 9.4.0.129. The signature-field adapter and native-process interface depend on editor internals.
+Requires Windows 10 or later, x64; tested with ONLYOFFICE Desktop Editors 9.4.0.129. The signature-field adapter and native-process interface depend on editor internals.
 
 This editor version splits native executable paths at the first space, including quoted paths. The plugin installation path must therefore have no spaces. PDF filenames and save locations are unaffected.
 
@@ -23,19 +23,21 @@ The signing executable is unsigned. Managed devices may require administrator ap
 
 ## Build
 
-Use Windows x64 and Python 3.11. Create a virtual environment outside the checkout and obtain `pdfsign-bridge.exe` from the [v0.1.0 release](https://github.com/192d-Wing/pdf-sign/releases/tag/v0.1.0).
+Use Windows x64 and the official CPython 3.11.9 distribution. Create a virtual environment outside the checkout and obtain `pdfsign-bridge.exe` from the [v0.1.0 release](https://github.com/192d-Wing/pdf-sign/releases/tag/v0.1.0).
 
 ```powershell
 python -m pip install -r requirements-build.txt
 python -B build_standalone.py --output ..\standalone-build --bridge ..\pdfsign-bridge.exe
 ```
 
-The builder checks the bridge checksum, packages the runtime with PyInstaller, runs a dependency check, and writes:
+The builder verifies the bridge and license checksums, packages the runtime with PyInstaller, checks the DLL inventory and dependency imports, and writes:
 
 - `CAC-PDF-Signer.plugin`
 - `SHA256SUMS.txt`
 
 Build output must be outside the checkout. `--reuse-executable` repackages assets during development; rebuild the executable after changes to Python source or dependencies.
+
+The build uses only Python and Windows directories for native-library lookup. Windows supplies the Universal CRT and API-set libraries. Changing Python, either OpenSSL version, or the native DLL inventory requires reviewing and updating the accompanying notices.
 
 ## Legacy tools
 
