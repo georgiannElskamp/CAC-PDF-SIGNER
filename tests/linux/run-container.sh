@@ -13,7 +13,7 @@ docker create --name "$container" --shm-size=1g \
     --mount "type=bind,src=$input,dst=/input,readonly" cac-simulation
 status=0
 docker start -a "$container" || status=$?
-for name in signing-result.json signed-preview.png; do
+for name in signing-result.json signed-preview.png field-screen.png ui-failure.png; do
     docker cp "$container:/evidence/$name" "$report/$name" 2>/dev/null || true
 done
 exit "$status"

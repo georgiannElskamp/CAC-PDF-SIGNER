@@ -1,0 +1,196 @@
+"""Private GitHub scheduler; durable state lives on its state branch."""
+
+import argparse
+import base64
+from datetime import datetime, timedelta, timezone
+import hashlib
+import json
+import os
+import re
+import urllib.error
+import urllib.request
+
+PUBLIC = "georgiannElskamp/CAC-PDF-SIGNER"
+UPSTREAM = "ONLYOFFICE/DesktopEditors"
+PRIVATE = os.environ.get("GITHUB_REPOSITORY", "")
+ASSETS = {"windows": "DesktopEditors_x64.exe", "linux": "onlyoffice-desktopeditors_amd64.deb"}
+
+
+def api(path, method="GET", body=None, dispatch=False, anonymous=False):
+    headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
+    if not anonymous:
+        headers["Authorization"] = "Bearer " + os.environ["DISPATCH_TOKEN" if dispatch else "GH_TOKEN"]
+    request = urllib.request.Request("https://api.github.com" + path,
+        headers=headers, data=None if body is None else json.dumps(body).encode(), method=method)
+    with urllib.request.urlopen(request, timeout=60) as response:
+        data = response.read()
+        return json.loads(data) if data else None
+
+
+def now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+def stale(value, hours):
+    return not value or datetime.fromisoformat(value.replace("Z", "+00:00")) < datetime.now(timezone.utc) - timedelta(hours=hours)
+
+
+def load_state():
+    try:
+        item = api(f"/repos/{PRIVATE}/contents/state.json?ref=state")
+    except urllib.error.HTTPError as error:
+        if error.code != 404:
+            raise
+        return {"records": {}}, None
+    return json.loads(base64.b64decode(item["content"])), item["sha"]
+
+
+def save_state(state):
+    _, sha = load_state()
+    if not sha:
+        try:
+            ref = api(f"/repos/{PRIVATE}/git/ref/heads/main")
+            api(f"/repos/{PRIVATE}/git/refs", "POST", {"ref": "refs/heads/state", "sha": ref["object"]["sha"]})
+        except urllib.error.HTTPError as error:
+            if error.code != 422:
+                raise
+    body = {"message": "Update discovery state", "branch": "state",
+            "content": base64.b64encode((json.dumps(state, indent=2, sort_keys=True) + "\n").encode()).decode()}
+    if sha:
+        body["sha"] = sha
+    api(f"/repos/{PRIVATE}/contents/state.json", "PUT", body)
+
+
+def public_file(path, commit):
+    item = api(f"/repos/{PUBLIC}/contents/{path}?ref={commit}", anonymous=True)
+    return json.loads(base64.b64decode(item["content"]))
+
+
+def manifest(release):
+    tag = release["tag_name"]
+    if not re.fullmatch(r"v\d+(?:\.\d+){1,3}", tag) or release["draft"] or release["prerelease"]:
+        raise ValueError("Not a stable editor release")
+    result = {"version": tag[1:], "releaseId": release["id"], "publishedAt": release["published_at"]}
+    for platform, filename in ASSETS.items():
+        found = [asset for asset in release["assets"] if asset["name"] == filename]
+        if len(found) != 1 or not re.fullmatch(r"sha256:[a-f0-9]{64}", found[0].get("digest") or ""):
+            raise ValueError("Missing installer or official checksum: " + filename)
+        asset = found[0]
+        if asset["browser_download_url"] != f"https://github.com/{UPSTREAM}/releases/download/{tag}/{filename}":
+            raise ValueError("Unexpected installer URL")
+        result[platform] = {"file": filename, "sha256": asset["digest"][7:], "assetId": asset["id"], "updatedAt": asset["updated_at"]}
+    return result
+
+
+def fingerprint(editor, approved, commit):
+    value = {"editor": editor, "plugin": approved["sha256"], "harness": commit,
+             "runners": ["windows-2025", "ubuntu-24.04"], "simulation": "debian:12"}
+    return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
+
+
+def reconcile(state):
+    for key, record in state["records"].items():
+        if record["status"] not in ("dispatching", "pending"):
+            continue
+        if not record.get("runId"):
+            runs = api(f"/repos/{PUBLIC}/actions/workflows/compatibility-test.yml/runs?event=workflow_dispatch&per_page=100", dispatch=True)["workflow_runs"]
+            requested = datetime.fromisoformat(record["requestedAt"]) - timedelta(seconds=1)
+            matches = [run for run in runs if key in run["display_title"]
+                       and datetime.fromisoformat(run["created_at"].replace("Z", "+00:00")) >= requested]
+            if len(matches) == 1:
+                record["runId"] = matches[0]["id"]
+        if record.get("runId"):
+            run = api(f"/repos/{PUBLIC}/actions/runs/{record['runId']}", dispatch=True)
+            record.update(status="completed" if run["status"] == "completed" else "pending",
+                          conclusion=run.get("conclusion"), url=run["html_url"])
+            if run["status"] == "completed":
+                record["completedAt"] = run["updated_at"]
+
+
+def watch(force=False):
+    state, _ = load_state()
+    reconcile(state)
+    commit = api(f"/repos/{PUBLIC}/commits/main", anonymous=True)["sha"]
+    approved = public_file("tests/approved-plugin.json", commit)
+    baseline = tuple(map(int, public_file("tests/editor-installers.json", commit)["version"].split(".")))
+    releases, page = [], 1
+    while True:
+        batch = api(f"/repos/{UPSTREAM}/releases?per_page=100&page={page}", anonymous=True)
+        releases.extend(batch)
+        if len(batch) < 100:
+            break
+        page += 1
+    state["pendingAssets"] = []
+    dispatched = 0
+    for release in sorted(releases, key=lambda value: value.get("published_at") or ""):
+        tag = release["tag_name"]
+        if release["draft"] or release["prerelease"] or not re.fullmatch(r"v\d+(?:\.\d+){1,3}", tag):
+            continue
+        if tuple(map(int, tag[1:].split("."))) < baseline:
+            continue
+        try:
+            editor = manifest(release)
+        except ValueError as error:
+            state["pendingAssets"].append({"tag": tag, "reason": str(error)})
+            continue
+        key = fingerprint(editor, approved, commit)
+        record = state["records"].get(key)
+        weekly_control = record and record.get("conclusion") == "success" and stale(record.get("completedAt"), 168)
+        if record and (record["status"] != "completed" or not (force or weekly_control)):
+            continue
+        if dispatched >= 3:
+            break
+        # Save intent first. An ambiguous dispatch is reconciled, not blindly retried.
+        state["records"][key] = {"status": "dispatching", "tag": tag, "requestedAt": now(), "harness": commit}
+        save_state(state)
+        response = api(f"/repos/{PUBLIC}/actions/workflows/compatibility-test.yml/dispatches", "POST",
+                       {"ref": "main", "inputs": {"editor_tag": tag, "request_id": key}}, dispatch=True)
+        if response and response.get("workflow_run_id"):
+            state["records"][key]["runId"] = response["workflow_run_id"]
+        state["records"][key]["status"] = "pending"
+        save_state(state)
+        dispatched += 1
+    state["lastSuccessfulPoll"] = now()
+    if stale(state.get("lastComponentDispatch"), 168):
+        api(f"/repos/{PUBLIC}/actions/workflows/component-watch.yml/dispatches", "POST", {"ref": "main"}, dispatch=True)
+        state["lastComponentDispatch"] = now()
+    save_state(state)
+    print(f"Dispatched {dispatched}; waiting for assets: {len(state['pendingAssets'])}")
+
+
+def health():
+    state, _ = load_state()
+    problems = []
+    if stale(state.get("lastSuccessfulPoll"), 48):
+        problems.append("No successful discovery in the past 48 hours. Check App credentials and the Discovery workflow.")
+    for key, record in state["records"].items():
+        if record["status"] != "completed" and stale(record.get("requestedAt"), 24):
+            problems.append(f"{record['tag']}: dispatch {key[:12]} has no completed result. Inspect before manually retrying.")
+    for item in state.get("pendingAssets", []):
+        problems.append(item["tag"] + ": " + item["reason"])
+    if state.get("lastComponentDispatch"):
+        runs = api(f"/repos/{PUBLIC}/actions/workflows/component-watch.yml/runs?per_page=1", anonymous=True)["workflow_runs"]
+        if not runs or stale(runs[0]["created_at"], 192) or (runs[0]["status"] == "completed" and runs[0]["conclusion"] != "success"):
+            problems.append("The weekly component watch is missing, stale or unsuccessful.")
+    title = "Scheduler health"
+    issues = api(f"/repos/{PRIVATE}/issues?state=all&per_page=100")
+    issue = next((item for item in issues if item["title"] == title and not item.get("pull_request")
+                  and item.get("user", {}).get("login") == "github-actions[bot]"), None)
+    body = "\n\n".join(problems) if problems else "Discovery and dispatch reconciliation are current."
+    values = {"title": title, "body": body, "state": "open" if problems else "closed"}
+    if issue:
+        if issue["body"] != body or issue["state"] != values["state"]:
+            api(f"/repos/{PRIVATE}/issues/{issue['number']}", "PATCH", values)
+    elif problems:
+        api(f"/repos/{PRIVATE}/issues", "POST", {"title": title, "body": body})
+    print(body)
+    if problems:
+        raise SystemExit(1)
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=["watch", "health"])
+    parser.add_argument("--force", action="store_true")
+    args = parser.parse_args()
+    watch(args.force) if args.command == "watch" else health()

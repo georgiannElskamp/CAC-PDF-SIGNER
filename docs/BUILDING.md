@@ -2,6 +2,8 @@
 
 Run commands from the repository root. Keep Python environments, native build directories and generated packages outside the checkout. End users install the finished `.plugin` file and do not need these tools.
 
+For a build that needs no local toolchain, use GitHub's **Build candidate** workflow. It builds both workers, validates the package, and provides the installable artifact. **Prepare release draft** carries a successful candidate into the approval-gated release workflow. See [GitHub maintenance](AUTOMATION.md#build-and-release-from-github).
+
 ## Windows worker and combined package
 
 Use Windows x64 and the official CPython 3.11.9 distribution. Create a virtual environment outside the checkout and obtain `pdfsign-bridge.exe` from the upstream [v0.1.0 release](https://github.com/192d-Wing/pdf-sign/releases/tag/v0.1.0).
@@ -45,7 +47,7 @@ This command checks the local release without changing GitHub. After review and 
 python -B tools/publish_release.py --publish
 ```
 
-Publishing pushes the commit and version tag, uploads a draft and starts the release workflow. Publication requires Windows/Linux source tests, checks of both uploaded workers, installation tests in fresh editors, and an exact match between tagged source and packaged source. Editor installers and checksums are pinned in `tests/editor-installers.json`; they are test dependencies and are not shipped in the plugin.
+Publishing pushes the commit and version tag, uploads a draft and starts the release workflow. Publication requires Windows/Linux source tests, checks of both uploaded workers, installation tests in fresh editors, simulated Linux signing, an exact match between tagged source and packaged source, and approval in the `release` environment. Editor installers and checksums are pinned in `tests/editor-installers.json`; they are test dependencies and are not shipped in the plugin.
 
 Versions containing a hyphen are initially published as prereleases. A failed check leaves the release in draft. Retry an unchanged draft through **Actions > Publish release > Run workflow** with its tag. If source or package content changes after tagging, use a new version and tag. Do not replace published assets or move release tags.
 

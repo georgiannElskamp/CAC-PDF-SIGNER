@@ -5,7 +5,7 @@ export QT_QPA_PLATFORM=xcb GDK_BACKEND=x11
 mkdir -p "$HOME/Documents"
 cleanup() {
     [[ -z ${editor_pid:-} ]] || kill "$editor_pid" 2>/dev/null || true
-    rm -rf /test/tokens /test/state/*
+    rm -rf /test/tokens/* /test/state/*
 }
 trap cleanup EXIT
 printf 'directories.tokendir = /test/tokens\nobjectstore.backend = file\nlog.level = ERROR\n' > "$SOFTHSM2_CONF"
@@ -22,4 +22,7 @@ node tests/editor_smoke.js --fixture "$HOME/Documents/installation-test.pdf"
 launcher=$(command -v onlyoffice-desktopeditors || command -v desktopeditors)
 "$launcher" --remote-debugging-port=9251 "$HOME/Documents/installation-test.pdf" > /test/state/editor.log 2>&1 &
 editor_pid=$!
-node tests/linux/signing.js
+status=0
+node tests/linux/signing.js || status=$?
+if [[ "$status" != 0 ]]; then python3 -B tests/linux/capture_screen.py /evidence/ui-failure.png || true; fi
+exit "$status"

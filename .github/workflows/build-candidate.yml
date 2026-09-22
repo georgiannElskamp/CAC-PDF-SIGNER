@@ -1,0 +1,70 @@
+name: Build candidate
+on:
+  workflow_dispatch:
+  workflow_call:
+permissions:
+  contents: read
+concurrency:
+  group: candidate-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  source:
+    uses: ./.github/workflows/checks.yml
+  linux:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build glibc 2.28 worker from pinned sources
+        run: |
+          mkdir "$RUNNER_TEMP/linux"
+          docker build --pull -f native_linux/Dockerfile -t cac-linux-build .
+          docker run --rm --mount "type=bind,src=$RUNNER_TEMP/linux,dst=/output" cac-linux-build
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-worker
+          path: ${{ runner.temp }}/linux/linux-bundle.tar
+          retention-days: 3
+          if-no-files-found: error
+  windows:
+    needs: [source, linux]
+    runs-on: windows-2025
+    timeout-minutes: 35
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11.9'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: linux-worker
+          path: ${{ runner.temp }}/build-input
+      - run: python -m pip install -r requirements-build.txt setuptools==80.9.0
+      - name: Verify bridge and unpack Linux bundle
+        run: python -B tools/candidate.py inputs "$RUNNER_TEMP/build-input"
+      - name: Build Windows worker and combined plugin
+        run: python -B tools/build_standalone.py --output "$RUNNER_TEMP/candidate" --bridge "$RUNNER_TEMP/build-input/pdfsign-bridge.exe" --linux-bundle "$RUNNER_TEMP/build-input/linux-bundle"
+      - name: Audit matching source and release files
+        run: python -B tools/candidate.py finish "$RUNNER_TEMP/candidate"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: candidate
+          path: |
+            ${{ runner.temp }}/candidate/CAC-PDF-Signer.plugin
+            ${{ runner.temp }}/candidate/SHA256SUMS.txt
+            ${{ runner.temp }}/candidate/INSTALL.txt
+            ${{ runner.temp }}/candidate/editor.json
+            ${{ runner.temp }}/candidate/metadata.json
+            ${{ runner.temp }}/candidate/components.cdx.json
+          retention-days: 14
+          if-no-files-found: error
+  validate:
+    needs: windows
+    uses: ./.github/workflows/candidate-checks.yml

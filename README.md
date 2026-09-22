@@ -42,6 +42,7 @@ The signing modules stay at the root; editor integration is in `plugin/`, build 
 - [Architecture and repository layout](docs/ARCHITECTURE.md)
 - [Build and release instructions](docs/BUILDING.md)
 - [Tests and compatibility matrix](docs/TESTING.md)
+- [GitHub maintenance and hosted builds](docs/AUTOMATION.md)
 - [Release notes](docs/RELEASE_NOTES.md)
 - [Security](SECURITY.md)
 

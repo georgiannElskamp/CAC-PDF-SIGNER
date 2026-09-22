@@ -1,0 +1,44 @@
+name: Runtime change validation
+on:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: pr-runtime-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+jobs:
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      required: ${{ steps.scope.outputs.required }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: python3 -B tools/build_scope.py
+  build:
+    needs: changes
+    if: needs.changes.outputs.required == 'true'
+    uses: ./.github/workflows/build-candidate.yml
+  gate:
+    name: Runtime build requirement
+    needs: [changes, build]
+    if: always()
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Require rebuilt and tested runtime when affected
+        env:
+          CHANGES: ${{ needs.changes.result }}
+          REQUIRED: ${{ needs.changes.outputs.required }}
+          BUILD: ${{ needs.build.result }}
+        run: |
+          test "$CHANGES" = success
+          if [[ "$REQUIRED" == true ]]; then test "$BUILD" = success; else test "$BUILD" = skipped; fi

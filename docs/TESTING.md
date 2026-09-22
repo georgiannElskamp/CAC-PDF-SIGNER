@@ -18,6 +18,12 @@ python -B tools/verify_package.py release/CAC-PDF-Signer.plugin
 
 To run the editor smoke test elsewhere, use a disposable OS account or Linux XDG profile. Generate its only PDF with `node tests/editor_smoke.js --fixture <pdf-path>`, open it in ONLYOFFICE with `--remote-debugging-port=9251`, then run `node tests/editor_smoke.js --disposable-profile 9251 <absolute-plugin-path> <version>`. The tool refuses an existing CAC installation and other PDF fields. Close the test editor afterward; remote debugging should not be enabled during normal signing.
 
+### Hosted signing regression
+
+The unchanged approved plugin passed the [hosted compatibility matrix](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/actions/runs/35768964456) on 2026-09-22. Windows and Ubuntu installation checks passed. A disposable Debian 12 container also verified an actual pointer click, native PIN prompt, PKCS#11 signature, Save As cancellation and recovery without another PIN, a spaced Unicode save path, unchanged original bytes, independent Poppler verification and reopening the signed field. The bundled reader stack passed a separate no-card control without system smart-card middleware.
+
+The rendered certificate text was inspected using synthetic identity `EXAMPLE.TEST.0000000000`. Generated keys and token files were confined to the disposable container and excluded from artifacts. The screenshot and structured report are retained for 14 days; the workflow result and compatibility issue retain the pass record. This adds repeatable software-token coverage, not physical Linux hardware validation. See [GitHub maintenance](AUTOMATION.md).
+
 ## Current release
 
 Version 0.7.0-rc.6 was accepted for release on 2026-09-22. Its artifact and version label are unchanged from the tested candidate. It retains the rc.2 signing code and corrects draft-asset access, Linux editor launch and Windows test-process cleanup in the release workflow.
@@ -82,6 +88,6 @@ Other ONLYOFFICE builds need adapter validation. ARM64 and musl builds are not s
 
 Run `python -B tools/publish_release.py` to check a newly prepared package. Record completed checks and untested configurations before publication. Hardware validation limits must remain explicit in release notes, including when the maintainer accepts them for release. See [build and release instructions](BUILDING.md).
 
-Publishing pushes the commit and version tag, uploads a draft release and dispatches the release workflow. GitHub runs Windows/Linux source tests, executes both uploaded native workers, tests installation in fresh editors and checks the package against the tagged source before publication. Versions containing a hyphen are initially published as prereleases. A failed workflow leaves the release in draft. A validated candidate can subsequently be promoted in GitHub without changing its tag or assets.
+Publishing pushes the commit and version tag, uploads a draft release and dispatches the release workflow. GitHub runs Windows/Linux source tests, executes both uploaded native workers, tests installation and simulated Linux signing, and checks the package against the tagged source before requesting maintainer approval. Versions containing a hyphen are initially published as prereleases. A failed workflow leaves the release in draft. A validated candidate can subsequently be promoted in GitHub without changing its tag or assets.
 
 To retry an uploaded draft after a workflow failure, run **Actions > Publish release > Run workflow** with the same tag. Rebuild and use a new version if the source or package changes.

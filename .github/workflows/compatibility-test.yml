@@ -1,10 +1,14 @@
 name: ONLYOFFICE compatibility
-run-name: ONLYOFFICE ${{ inputs.editor_tag || 'latest stable' }} compatibility
+run-name: ONLYOFFICE ${{ inputs.editor_tag || 'latest stable' }} compatibility ${{ inputs.request_id }}
 on:
   workflow_dispatch:
     inputs:
       editor_tag:
         description: Official stable Desktop Editors tag (blank selects latest)
+        type: string
+        default: ''
+      request_id:
+        description: Discovery fingerprint (leave blank for a manual test)
         type: string
         default: ''
 permissions:
@@ -29,12 +33,13 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           EDITOR_TAG: ${{ inputs.editor_tag }}
-        run: python3 -B tools/automation.py prepare --tag "$EDITOR_TAG" --output "$RUNNER_TEMP/input"
+          EXPECTED: ${{ inputs.request_id }}
+        run: python3 -B tools/automation.py prepare --tag "$EDITOR_TAG" --expected "$EXPECTED" --output "$RUNNER_TEMP/input"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: compatibility-input
           path: ${{ runner.temp }}/input
-          retention-days: 14
+          retention-days: 1
           if-no-files-found: error
   source:
     uses: ./.github/workflows/checks.yml
@@ -139,7 +144,17 @@ jobs:
           path: ${{ runner.temp }}/input
       - name: Sign with a disposable software token
         id: signing
+        continue-on-error: true
         run: bash tests/linux/run-container.sh "$RUNNER_TEMP/input" "$RUNNER_TEMP/report"
+      - name: Test simulated signing with the approved editor after a failure
+        id: baseline
+        if: steps.signing.outcome == 'failure'
+        continue-on-error: true
+        run: |
+          mkdir "$RUNNER_TEMP/control"
+          cp "$RUNNER_TEMP/input/CAC-PDF-Signer.plugin" "$RUNNER_TEMP/input/metadata.json" "$RUNNER_TEMP/control/"
+          cp tests/editor-installers.json "$RUNNER_TEMP/control/editor.json"
+          bash tests/linux/run-container.sh "$RUNNER_TEMP/control" "$RUNNER_TEMP/control-report"
       - name: Record outcomes
         if: always()
         env:
@@ -153,8 +168,29 @@ jobs:
             ${{ runner.temp }}/report/result-simulation.json
             ${{ runner.temp }}/report/signing-result.json
             ${{ runner.temp }}/report/signed-preview.png
+            ${{ runner.temp }}/report/field-screen.png
+            ${{ runner.temp }}/report/ui-failure.png
           retention-days: 14
           if-no-files-found: error
+      - name: Preserve separate baseline evidence
+        if: always() && steps.baseline.outcome != 'skipped'
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          for path in (Path(os.environ['RUNNER_TEMP']) / 'control-report').glob('*'):
+              path.rename(path.with_name('baseline-' + path.name))
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always() && steps.baseline.outcome != 'skipped'
+        with:
+          name: compatibility-simulation-control
+          path: ${{ runner.temp }}/control-report/baseline-*
+          retention-days: 14
+          if-no-files-found: warn
+      - name: Require candidate signing pass
+        if: steps.signing.outcome != 'success'
+        run: exit 1
   report:
     needs: [prepare, source, package-audit, desktop, simulation]
     if: always() && needs.prepare.result == 'success'
@@ -182,3 +218,23 @@ jobs:
           SOURCE: ${{ needs.source.result }}
           PACKAGE: ${{ needs.package-audit.result }}
         run: test "$SOURCE" = success && test "$PACKAGE" = success
+  propose-pin:
+    needs: report
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: compatibility-input
+          path: ${{ runner.temp }}/input
+      - name: Propose the tested editor baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B tools/propose_editor.py "$RUNNER_TEMP/input"

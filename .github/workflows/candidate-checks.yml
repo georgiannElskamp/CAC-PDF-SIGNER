@@ -1,0 +1,63 @@
+name: Candidate checks
+on:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  desktop:
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: candidate
+          path: ${{ runner.temp }}/input
+      - name: Prepare Linux display
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth libgbm1
+      - name: Test packaged runtime
+        run: python -B tools/verify_package.py "$RUNNER_TEMP/input/CAC-PDF-Signer.plugin"
+      - name: Test installation in approved editor
+        run: |
+          command=(python -B tests/editor_ci.py "$RUNNER_TEMP/input/CAC-PDF-Signer.plugin")
+          if [[ "$RUNNER_OS" == Linux ]]; then xvfb-run -a "${command[@]}"; else "${command[@]}"; fi
+  signing:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: candidate
+          path: ${{ runner.temp }}/input
+      - name: Test simulated signing
+        run: bash tests/linux/run-container.sh "$RUNNER_TEMP/input" "$RUNNER_TEMP/report"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: candidate-signing-report
+          path: |
+            ${{ runner.temp }}/report/signing-result.json
+            ${{ runner.temp }}/report/signed-preview.png
+            ${{ runner.temp }}/report/field-screen.png
+            ${{ runner.temp }}/report/ui-failure.png
+          retention-days: 14
+          if-no-files-found: error
