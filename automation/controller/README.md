@@ -10,7 +10,7 @@ Private GitHub-hosted release discovery and health checks. All editor tests and 
 4. Set the Actions variable `AUTOMATION_ENABLED` to `true`.
 5. Run **Discovery** manually, then **Scheduler health** after discovery and compatibility tests finish.
 
-Discovery runs daily at 08:23 UTC. Health runs at 11:41 UTC. GitHub schedules are best effort. State is stored on the `state` branch. The scheduler processes up to three unseen releases per poll and rechecks successful combinations after seven days. Failed tests require review; they are not repeatedly retried.
+Discovery runs daily at 08:23 UTC and dispatches the native component watch weekly. Health runs at 11:41 UTC. GitHub schedules are best effort. State is stored on the `state` branch. The scheduler processes up to three unseen releases per poll and rechecks successful combinations after seven days. Failed tests require review; they are not repeatedly retried.
 
 Use **Discovery > Run workflow > Retest completed combinations** after resolving a failure. An ambiguous dispatch is preserved for reconciliation. Check its run before removing an unresolved record from `state.json`.
 
