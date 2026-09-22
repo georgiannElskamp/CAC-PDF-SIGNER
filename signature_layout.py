@@ -26,7 +26,7 @@ def text_width(value, size=1):
     return sum(WIDTHS[code] for code in encode_text(value)) * size / 1000
 
 
-def wrap_lines(paragraphs, width, size, break_hyphens=False):
+def wrap_lines(paragraphs, width, size, break_hyphens=False, measure=text_width):
     """Wrap at word boundaries, with optional breaks at existing name hyphens."""
     lines = []
     for paragraph in paragraphs:
@@ -41,10 +41,10 @@ def wrap_lines(paragraphs, width, size, break_hyphens=False):
                 (piece, " " if index == 0 else "") for index, piece in enumerate(pieces)
             )
         for word, separator in tokens:
-            if text_width(word, size) > width:
+            if measure(word, size) > width:
                 return None
             candidate = (line + separator + word).lstrip()
-            if line and text_width(candidate, size) > width:
+            if line and measure(candidate, size) > width:
                 lines.append(line)
                 line = word
             else:
@@ -60,23 +60,26 @@ class TextBlock:
     font_size: float
     x: float
     first_baseline: float
+    line_height: float = LEADING
 
     @property
     def leading(self):
-        return self.font_size * LEADING
+        return self.font_size * self.line_height
 
 
-def fit_text(paragraphs, x, y, width, height, break_hyphens=False):
+def fit_text(paragraphs, x, y, width, height, break_hyphens=False, measure=text_width,
+             metrics=(ASCENT, DESCENT, LEADING)):
     """Find the largest font that fits both measured width and wrapped height."""
     paragraphs = tuple(" ".join(value.split()) for value in paragraphs if value.strip())
     if not paragraphs:
         raise ValueError("The visible signature has no text.")
-    low, high = 0.0, height / (ASCENT + DESCENT)
+    ascent, descent, leading = metrics
+    low, high = 0.0, height / (ascent + descent)
     for _ in range(32):
         size = (low + high) / 2
-        lines = wrap_lines(paragraphs, width, size, break_hyphens)
+        lines = wrap_lines(paragraphs, width, size, break_hyphens, measure)
         occupied = (
-            ((len(lines) - 1) * LEADING + ASCENT + DESCENT) * size
+            ((len(lines) - 1) * leading + ascent + descent) * size
             if lines
             else math.inf
         )
@@ -86,13 +89,13 @@ def fit_text(paragraphs, x, y, width, height, break_hyphens=False):
             high = size
     # Leave a small numerical allowance for PDF decimal serialization.
     size = low * 0.999
-    lines = wrap_lines(paragraphs, width, size, break_hyphens)
-    occupied = ((len(lines) - 1) * LEADING + ASCENT + DESCENT) * size
-    baseline = y + (height + occupied) / 2 - ASCENT * size
-    return TextBlock(lines, size, x, baseline)
+    lines = wrap_lines(paragraphs, width, size, break_hyphens, measure)
+    occupied = ((len(lines) - 1) * leading + ascent + descent) * size
+    baseline = y + (height + occupied) / 2 - ascent * size
+    return TextBlock(lines, size, x, baseline, leading)
 
 
-def signature_layout(width, height, name, details):
+def signature_layout(width, height, name, details, **font_options):
     if not all(math.isfinite(v) and v > 0 for v in (width, height)):
         raise ValueError("Invalid signature field dimensions.")
     padding = min(width, height) * 0.035
@@ -123,6 +126,6 @@ def signature_layout(width, height, name, details):
             "  ".join(paragraphs[:date_index]),
             "  ".join(paragraphs[date_index:]),
         ]
-    return fit_text((name,), *name_box, break_hyphens=True), fit_text(
-        paragraphs, *detail_box
+    return fit_text((name,), *name_box, break_hyphens=True, **font_options), fit_text(
+        paragraphs, *detail_box, **font_options
     )

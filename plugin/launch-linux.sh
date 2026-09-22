@@ -12,5 +12,13 @@ if [ ! -f "$worker" ]; then
     exit 1
 fi
 # Plugin extraction does not preserve Unix executable permissions in every editor build.
-chmod u+x -- "$worker"
+if [ ! -x "$worker" ] && ! chmod u+x -- "$worker"; then
+    printf '%s\n' '{"event":"result","ok":false,"error":"The Linux signing runtime is not executable. Check plugin ownership and filesystem execution permissions."}'
+    exit 1
+fi
+reader="$root/native/$architecture/_internal/pcscd"
+if [ -f "$reader" ] && [ ! -x "$reader" ] && ! chmod u+x -- "$reader"; then
+    printf '%s\n' '{"event":"result","ok":false,"error":"The bundled reader is not executable. Check plugin ownership and filesystem execution permissions."}'
+    exit 1
+fi
 exec "$worker"

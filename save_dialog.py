@@ -6,6 +6,17 @@ import sys
 from ctypes import wintypes
 
 
+def check_desktop():
+    if sys.platform == "linux":
+        from linux_ui import Dialogs
+
+        Dialogs()
+    elif sys.platform == "win32":
+        ctypes.WinDLL("comdlg32", use_last_error=True)
+    else:
+        raise RuntimeError("This package supports Windows and Linux desktop editors.")
+
+
 def choose_pdf(name, folder=""):
     if sys.platform == "linux":
         from linux_ui import choose_pdf as linux_choose_pdf

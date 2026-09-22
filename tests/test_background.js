@@ -113,6 +113,35 @@ function adapterTest() {
   assert.equal(empty.Vh, original);
   api.asc_getPdfProps = () => null;
   assert.throws(() => context.window.CACDesktop(host), /adapter update/);
+  api.GetVersion = () => "99.0.0";
+  assert.throws(() => context.window.CACDesktop(host), /ONLYOFFICE 99\.0\.0 needs/);
+  api.GetVersion = () => { throw new Error("Unavailable"); };
+  assert.throws(() => context.window.CACDesktop(host), /ONLYOFFICE unknown needs/);
 }
 adapterTest();
-console.log("PASS: field targeting, filled-field rejection, unsaved-edit guard, version guard and cleanup");
+async function startupTest(fail, unload) {
+  const events = [], handlers = {};
+  let resolve, reject;
+  const pending = new Promise((ok, no) => { resolve = ok; reject = no; });
+  const context = {
+    Asc: { plugin: { info: { editorType: "pdf" } } },
+    window: { addEventListener: (name, fn) => { handlers[name] = fn; } },
+    parent: { Common: { UI: { warning: () => events.push("error") } } },
+    CACNativeClient: () => ({ call: (request) => {
+      assert.equal(request.op, "preflight");
+      events.push("preflight"); return pending;
+    }, close: () => events.push("close") }),
+    CACDesktop: () => ({ attach: () => events.push("attach"), detach: () => events.push("detach") }),
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(root, "plugin/standalone-background.js"), "utf8"), context);
+  const started = context.Asc.plugin.init();
+  await context.Asc.plugin.init();
+  assert.deepEqual(events, ["preflight"]);
+  if (unload) handlers.unload();
+  if (fail) reject(new Error("Startup failed")); else resolve({ ok: true });
+  await started;
+  assert.deepEqual(events, unload ? ["preflight", "detach", "close"] : ["preflight", fail ? "error" : "attach"]);
+}
+Promise.all([startupTest(false, false), startupTest(true, false), startupTest(false, true)])
+  .then(() => console.log("PASS: fields, unsaved edits, version guard, startup preflight and cleanup"))
+  .catch(error => { console.error(error); process.exitCode = 1; });

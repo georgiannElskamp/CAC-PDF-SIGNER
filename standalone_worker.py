@@ -12,10 +12,32 @@ import tempfile
 import threading
 import uuid
 from contextlib import contextmanager
-from pathlib import Path
+from pathlib import Path, PureWindowsPath
 
 from runtime_config import MAX_PDF, VERSION, state_directory
 MAX_REQUEST = MAX_PDF * 4 // 3 + 16384
+
+
+def valid_windows_destination(filename):
+    path = PureWindowsPath(filename)
+    drive = path.drive
+    if drive.lower().startswith("\\\\?\\unc\\"):
+        drive = "\\\\" + drive[8:]
+    elif drive.startswith("\\\\?\\"):
+        drive = drive[4:]
+    valid_drive = re.fullmatch(r"[A-Za-z]:|\\\\(?![.?]\\)[^\\:?]+\\[^\\:?]+", drive)
+    return bool(path.is_absolute() and valid_drive
+                and not any(":" in part for part in path.parts[1:]))
+
+
+def comparable_path(filename):
+    value = str(Path(filename).resolve())
+    if sys.platform == "win32":
+        if value.lower().startswith("\\\\?\\unc\\"):
+            value = "\\\\" + value[8:]
+        elif value.startswith("\\\\?\\"):
+            value = value[4:]
+    return os.path.normcase(value)
 
 
 def emit(message):
@@ -69,6 +91,18 @@ class SigningSession:
         self.output = self.directory / "Signed"
         self.bridge = Path(bridge)
 
+    def prepare_output(self):
+        try:
+            self.output.mkdir(parents=True, exist_ok=True, mode=0o700)
+            with tempfile.TemporaryFile(dir=self.output) as stream:
+                stream.write(b"recovery storage check")
+                stream.flush()
+                os.fsync(stream.fileno())
+        except OSError as exc:
+            raise RuntimeError(
+                "Cannot write the signed recovery folder. Check its permissions and free space before signing."
+            ) from exc
+
     def record(self, identifier, metadata):
         self.output.mkdir(parents=True, exist_ok=True)
         path = self.output / (identifier + ".json")
@@ -118,6 +152,7 @@ class SigningSession:
         field = request.get("field")
         if not isinstance(field, str) or not field.strip():
             raise ValueError("Click an empty PDF signature field.")
+        self.prepare_output()
         source_hash = hashlib.sha256(pdf).hexdigest()
         pending = self.pending(source_hash, field)
         if pending:
@@ -155,14 +190,15 @@ class SigningSession:
         if (
             not target.is_absolute()
             or target.suffix.lower() != ".pdf"
-            or (sys.platform == "win32" and ":" in str(target)[2:])
+            or (sys.platform == "win32" and not valid_windows_destination(filename))
         ):
             raise ValueError("Choose a PDF file in the Save As dialog.")
         target = target.resolve()
         source = metadata["source"]
-        if source and os.path.normcase(str(target)) == os.path.normcase(
-            str(Path(source).resolve())
-        ):
+        same_source = source and comparable_path(target) == comparable_path(source)
+        if source and target.exists() and Path(source).exists():
+            same_source = same_source or os.path.samefile(target, source)
+        if same_source:
             raise ValueError(
                 "Choose a different filename to preserve the original PDF."
             )
@@ -189,9 +225,10 @@ class SigningSession:
         return target
 
     def run(self, request):
-        from save_dialog import choose_pdf
+        from save_dialog import check_desktop, choose_pdf
 
         with signing_lock():
+            check_desktop()
             identifier, metadata, recovered = self.sign(request)
             emit({"event": "signed", "recovered": recovered})
             name = Path(metadata["name"]).stem + "-signed.pdf"
@@ -214,11 +251,23 @@ class SigningSession:
             return result
 
 
+def wait_for_acknowledgment():
+    # ONLYOFFICE can discard queued output when the process exits.
+    timeout = threading.Timer(10, lambda: os._exit(2))
+    timeout.daemon = True
+    timeout.start()
+    try:
+        sys.stdin.buffer.readline(128)
+    finally:
+        timeout.cancel()
+
+
 def main():
     # Bound the startup wait for a request.
     watchdog = threading.Timer(30, lambda: os._exit(2))
     watchdog.daemon = True
     watchdog.start()
+    request = None
     emit({"event": "ready", "version": VERSION})
     try:
         line = sys.stdin.buffer.readline(MAX_REQUEST + 1)
@@ -236,13 +285,25 @@ def main():
             raise RuntimeError(
                 "The plugin's bundled signing component is missing. Reinstall the plugin."
             )
-        if request.get("op") == "health":
+        if request.get("op") in ("health", "preflight"):
             import signing  # noqa: F401 -- validate packaged dependencies without accessing a card
+            import unicode_font  # noqa: F401
+            root = Path(getattr(sys, "_MEIPASS", Path(__file__).parent))
+            if not all((root / "fonts" / name).is_file() for name in ("NotoSans-Regular.ttf", "NotoSansCJKsc-Regular.otf")):
+                raise RuntimeError("The bundled signature fonts are missing. Reinstall the plugin.")
             if sys.platform == "linux":
                 from linux_card import check_runtime
 
                 check_runtime()
-            result = {"ok": True, "version": VERSION, "platform": sys.platform, "bundledBridge": True}
+            result = {"ok": True, "version": VERSION, "platform": sys.platform,
+                      "bundledBridge": True, "dependencyCheckOnly": True}
+            if request["op"] == "preflight":
+                from save_dialog import check_desktop
+
+                check_desktop()
+                SigningSession(state_directory(), bridge).prepare_output()
+                result.update(dependencyCheckOnly=False, desktopReady=True,
+                              recoveryWritable=True, cardChecked=False)
         elif request.get("op") == "sign":
             result = SigningSession(state_directory(), bridge).run(request)
         else:
@@ -260,6 +321,8 @@ def main():
         return 1
     finally:
         watchdog.cancel()
+        if isinstance(request, dict) and request.get("acknowledgeResult") is True:
+            wait_for_acknowledgment()
 
 
 if __name__ == "__main__":

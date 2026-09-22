@@ -86,6 +86,20 @@ class SignatureLayoutTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "cannot display"):
             signature_layout(280, 70, "Example \u4e2d", "Digitally signed by Example")
 
+    def test_unicode_certificate_names_use_embedded_fonts_and_preserve_integrity(self):
+        for name in ("Łukasz Example", "Αλέξης Example", "Александр Example", "陳 小明"):
+            with self.subTest(name=name):
+                class Fixture(test_signature_core.SignatureTests):
+                    common_name = name
+                Fixture.setUpClass()
+                signed = sign_bytes(Fixture.pdf, Fixture.signer, {"field": "First"})
+                reader = PdfFileReader(io.BytesIO(signed))
+                appearance = reader.embedded_signatures[0].sig_field["/AP"]["/N"]
+                fonts = appearance["/Resources"]["/Font"]
+                self.assertTrue(any(font.get_object()["/Subtype"] == "/Type0" for font in fonts.values()))
+                self.assertIn(b"/ActualText", appearance.data)
+                self.assertTrue(signed.startswith(Fixture.pdf))
+
     def test_rotated_fields_remain_signed_and_upright(self):
         Fixtures = test_signature_core.SignatureTests
         Fixtures.setUpClass()

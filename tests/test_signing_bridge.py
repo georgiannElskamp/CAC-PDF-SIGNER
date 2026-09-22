@@ -19,7 +19,7 @@ class BridgeTests(unittest.TestCase):
             return_value=SimpleNamespace(
                 returncode=0, stdout=struct.pack("<I", len(response)) + response
             ),
-        ) as execute:
+        ) as execute, patch("windows_csp.certificates", return_value=[]):
             self.assertEqual(signing.certificates(Path("bridge.exe")), [])
         payload = execute.call_args.kwargs["input"]
         self.assertEqual(struct.unpack("<I", payload[:4])[0], len(payload) - 4)

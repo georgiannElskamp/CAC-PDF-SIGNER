@@ -1,0 +1,11 @@
+{
+  "version": "9.4.0",
+  "windows": {
+    "file": "DesktopEditors_x64.exe",
+    "sha256": "a3b4a7353946a2d836eadfb8f59799f98b906ab961421c05c0bee00be9307a9f"
+  },
+  "linux": {
+    "file": "onlyoffice-desktopeditors_amd64.deb",
+    "sha256": "4271434e81be42b1559fd989d24bf6d413482f278dc6a5e328202a4fc1a18649"
+  }
+}

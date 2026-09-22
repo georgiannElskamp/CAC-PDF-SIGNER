@@ -2,6 +2,8 @@
   "use strict";
   let adapter,
     client,
+    initialized = false,
+    disposed = false,
     busy = false,
     lastError = "";
   const completed = new Set();
@@ -66,19 +68,24 @@
       busy = false;
     }
   }
-  Asc.plugin.init = function () {
+  Asc.plugin.init = async function () {
     // PDF form creation uses the document editor; signing starts after reopening the saved PDF.
     const info = Asc.plugin.info || {};
     if (info.editorType && info.editorType !== "pdf" && info.editorSubType !== "pdf") return;
+    if (initialized || disposed) return;
+    initialized = true;
     try {
-      client = CACNativeClient();
       adapter = CACDesktop(parent);
+      client = CACNativeClient();
+      await client.call({ op: "preflight" });
+      if (disposed) return;
       adapter.attach(sign, errorMessage);
     } catch (error) {
-      errorMessage(error);
+      if (!disposed) errorMessage(error);
     }
   };
   window.addEventListener("unload", () => {
+    disposed = true;
     if (adapter) adapter.detach();
     if (client) client.close();
   });

@@ -1,5 +1,9 @@
 # Third-party components
 
+## Signature fonts
+
+Unicode signature appearances use Noto Sans and Noto Sans CJK under the SIL Open Font License 1.1. Exact upstream revisions, checksums and unmodified license notices are in `fonts/`. FontTools and uharfbuzz provide parsing, subsetting and shaping; their distribution licenses accompany the packaged runtime.
+
 ## ONLYOFFICE plugin SDK
 
 `plugin/plugins.js` is the upstream ONLYOFFICE plugin bootstrap SDK from Ascensio System SIA. Its copyright header, AGPLv3 additional terms, trademark notices and GUI asset notices are retained. The AGPLv3 license is in `LICENSE`.
@@ -20,7 +24,7 @@ The standalone package includes the Windows CNG executable from `192d-Wing/pdf-s
 - Archive SHA-256: `c65fde8bed039378f13ef663781bee2498e4418cb2361a4e94759e39ef5b4910`
 - Executable SHA-256: `0c641a9a326498e90d9d5f887bfe694d389b8e7ee74857b551c240382431b067`
 
-The builder verifies the executable checksum before packaging.
+`tools/build_standalone.py` verifies the executable checksum before packaging.
 
 The bridge contains the Go 1.26.4 runtime and `golang.org/x/sys` v0.46.0, copyright The Go Authors, under BSD-3-Clause. Their notices are in `licenses/go-BSD-3-Clause.txt` and `licenses/go-x-sys-BSD-3-Clause.txt`.
 
@@ -52,7 +56,7 @@ The CPython runtime includes OpenSSL 3.0.13 in `libcrypto-3.dll` and `libssl-3.d
 
 ## Microsoft runtime
 
-The standalone executable includes `VCRUNTIME140.dll` supplied with the CPython 3.11.9 Windows distribution. Microsoft runtime code is proprietary and is not licensed under this project's AGPL license. The CPython Windows redistribution conditions are reproduced in `licenses/microsoft-runtime-CPython.txt` and in the packaged Python license.
+The Windows worker includes `VCRUNTIME140.dll` and `VCRUNTIME140_1.dll` supplied with the CPython 3.11.9 Windows distribution. Microsoft runtime code is proprietary and is not licensed under this project's AGPL license. The CPython Windows redistribution conditions are reproduced in `licenses/microsoft-runtime-CPython.txt` and in the packaged Python license.
 
 Windows supplies the Universal CRT and API-set libraries; copies of `ucrtbase.dll` and `api-ms-win-*.dll` are not bundled. Windows 10 or later is required. Windows and separately installed card middleware retain their respective licenses.
 
@@ -70,3 +74,7 @@ The worker includes python-pkcs11 0.10.0 and its license under `licenses/linux/d
 The native card stack includes OpenSC 0.27.1 (LGPL-2.1-or-later), libusb 1.0.30 (LGPL-2.1-or-later), pcsc-lite 2.5.2 and CCID 1.8.4 (their BSD-style terms), OpenSSL 3.5.8 (Apache-2.0), and zlib 1.3.2 (zlib license). License texts are in `licenses/linux-*-LICENSE.txt`. Exact source URLs and checksums are in `native_linux/sources.json`; OpenSC, libusb, pcsc-lite and CCID source archives accompany the plugin under `native-sources/linux/`. The pcsc-lite changes for private IPC paths are supplied in `source/native_linux/private_pcsc.py`.
 
 The operating system supplies glibc and GTK 3. The Linux worker contains no Windows executable or Microsoft runtime dependency. The combined plugin also contains a separate Windows worker, subject to the Windows notices above.
+
+## Installation tests
+
+Release checks download official ONLYOFFICE installers pinned in `tests/editor-installers.json` and install them only on disposable CI runners. The editor installers are not included in this plugin. Build and verification commands live in `tools/`; see [BUILDING.md](docs/BUILDING.md).

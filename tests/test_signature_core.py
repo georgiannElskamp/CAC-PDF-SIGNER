@@ -45,7 +45,7 @@ class SignatureTests(unittest.TestCase):
         subject = x509.Name(
             [
                 x509.NameAttribute(NameOID.ORGANIZATIONAL_UNIT_NAME, "DoD"),
-                x509.NameAttribute(NameOID.COMMON_NAME, "EXAMPLE.ALEX.0000000000"),
+                x509.NameAttribute(NameOID.COMMON_NAME, getattr(cls, "common_name", "EXAMPLE.ALEX.0000000000")),
             ]
         )
         cert = (

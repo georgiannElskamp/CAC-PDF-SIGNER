@@ -11,6 +11,17 @@ from runtime_config import state_directory
 
 @unittest.skipUnless(sys.platform == "linux", "Linux runtime")
 class LinuxRuntimeTests(unittest.TestCase):
+    def test_long_temporary_path_uses_short_private_socket_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            long = Path(directory) / ("x" * 100)
+            long.mkdir()
+            with patch.dict(os.environ, {"XDG_RUNTIME_DIR": str(long)}), patch.object(linux_card.tempfile, "gettempdir", return_value=str(long)):
+                with linux_card.private_reader_directory() as private:
+                    root = Path(private)
+                    self.assertLess(len(os.fsencode(str(root / "pcscd.comm"))), 108)
+                    self.assertEqual(root.stat().st_mode & 0o777, 0o700)
+                self.assertFalse(root.exists())
+
     def test_xdg_state_without_windows_environment(self):
         with tempfile.TemporaryDirectory() as directory:
             with patch.dict(os.environ, {"XDG_DATA_HOME": directory}, clear=True):

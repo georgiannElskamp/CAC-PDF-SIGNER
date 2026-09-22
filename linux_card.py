@@ -45,6 +45,21 @@ def available_socket(path):
         return False
 
 
+def private_reader_directory():
+    candidates = [os.environ.get("XDG_RUNTIME_DIR"), tempfile.gettempdir(), "/tmp"]
+    for base in dict.fromkeys(filter(None, candidates)):
+        if not Path(base).is_absolute():
+            continue
+        # sockaddr_un.sun_path includes the terminating NUL (108 bytes on Linux).
+        if len(os.fsencode(str(Path(base) / "cac-pcsc-xxxxxxxx/pcscd.comm"))) >= 108:
+            continue
+        try:
+            return tempfile.TemporaryDirectory(prefix="cac-pcsc-", dir=base)
+        except OSError:
+            continue
+    raise RuntimeError("No writable directory with a short enough path is available for the Linux card reader.")
+
+
 @contextmanager
 def reader_runtime():
     # A user-selected PKCS#11 provider owns its own reader transport.
@@ -64,7 +79,7 @@ def reader_runtime():
                     os.environ["PCSCLITE_CSOCK_NAME"] = previous
             return
     root = runtime_directory()
-    with tempfile.TemporaryDirectory(prefix="cac-pcsc-") as temporary:
+    with private_reader_directory() as temporary:
         channel = str(Path(temporary) / "pcscd.comm")
         os.environ["PCSCLITE_CSOCK_NAME"] = channel
         environment = dict(os.environ, CAC_PCSC_DIR=temporary,
@@ -79,7 +94,7 @@ def reader_runtime():
             deadline = time.monotonic() + 8
             while not available_socket(channel):
                 if process.poll() is not None or time.monotonic() >= deadline:
-                    raise RuntimeError("The bundled Linux reader component could not start. Check USB reader access permissions.")
+                    raise RuntimeError("The bundled Linux reader component could not start. Check local socket access and USB reader permissions.")
                 time.sleep(0.05)
             yield
         finally:

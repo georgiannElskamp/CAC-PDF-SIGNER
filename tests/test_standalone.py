@@ -4,20 +4,25 @@ import base64
 import hashlib
 import tempfile
 import unittest
+import sys
 from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import patch
 
-from standalone_worker import SigningSession
+from standalone_worker import SigningSession, valid_windows_destination
 
 
 class StandaloneRecoveryTests(unittest.TestCase):
     def setUp(self):
+        desktop = patch("save_dialog.check_desktop")
+        self.desktop = desktop.start()
+        self.addCleanup(desktop.stop)
         self.temporary = tempfile.TemporaryDirectory()
-        self.root = Path(self.temporary.name)
+        self.root = Path(self.temporary.name) / "Example User"
+        self.root.mkdir()
         self.session = SigningSession(self.root, self.root / "unused.exe")
         self.session.output.mkdir()
-        self.original = self.root / "original.pdf"
+        self.original = self.root / "original document.pdf"
         self.original.write_bytes(b"%PDF-test original")
         self.content = self.original.read_bytes() + b" signed bytes"
         self.recovery = self.session.output / "recovery.pdf"
@@ -55,7 +60,7 @@ class StandaloneRecoveryTests(unittest.TestCase):
             result = self.session.run(self.request)
             self.assertTrue(result["cancelled"])
         restarted = SigningSession(self.root, self.root / "unused.exe")
-        target = self.root / "chosen.pdf"
+        target = self.root / "chosen document.pdf"
         with (
             patch("standalone_worker.signing_lock", return_value=nullcontext()),
             patch("standalone_worker.emit"),
@@ -103,3 +108,38 @@ class StandaloneRecoveryTests(unittest.TestCase):
         self.assertIsNotNone(
             self.session.pending(self.metadata["sourceHash"], "PreparedBy")
         )
+
+    def test_unwritable_recovery_is_rejected_before_card_access(self):
+        session = SigningSession(self.root / "blocked", self.root / "unused.exe")
+        session.directory.mkdir()
+        session.output.write_bytes(b"conflicting file")
+        with patch("platform_card.card_signer") as card:
+            with self.assertRaisesRegex(RuntimeError, "before signing"):
+                session.sign(self.request)
+            card.assert_not_called()
+
+    def test_desktop_failure_is_rejected_before_card_access(self):
+        self.desktop.side_effect = RuntimeError("Desktop is unavailable")
+        with patch("standalone_worker.signing_lock", return_value=nullcontext()), patch("platform_card.card_signer") as card:
+            with self.assertRaisesRegex(RuntimeError, "Desktop is unavailable"):
+                self.session.run(self.request)
+            card.assert_not_called()
+
+    def test_windows_path_forms_preserve_alternate_stream_rejection(self):
+        for value in (r"C:\Example User\signed.pdf", r"\\server\share\signed.pdf",
+                      r"\\?\C:\Example User\signed.pdf", r"\\?\UNC\server\share\signed.pdf",
+                      r"\\files.example.test\share\signed.pdf", r"\\?\UNC\files.example.test\share\signed.pdf"):
+            self.assertTrue(valid_windows_destination(value), value)
+        for value in (r"C:relative.pdf", r"\relative.pdf", r"C:\signed.pdf:stream.pdf",
+                      r"\\?\C:\signed.pdf:stream.pdf", r"\\.\device\signed.pdf",
+                      r"\\?\GLOBALROOT\Device\signed.pdf"):
+            self.assertFalse(valid_windows_destination(value), value)
+
+    @unittest.skipUnless(sys.platform == "win32", "Windows extended paths")
+    def test_extended_windows_save_and_original_alias(self):
+        original = "\\\\?\\" + str(self.original.resolve())
+        with self.assertRaisesRegex(ValueError, "preserve the original"):
+            self.session.save(self.identifier, self.metadata, original)
+        target = self.root / "extended path.pdf"
+        self.session.save(self.identifier, self.metadata, "\\\\?\\" + str(target.resolve()))
+        self.assertEqual(target.read_bytes(), self.content)

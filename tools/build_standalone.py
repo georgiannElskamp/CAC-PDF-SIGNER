@@ -11,11 +11,12 @@ import sys
 import zipfile
 from pathlib import Path
 
+from _paths import ROOT
 from audit_public import audit, source_files
 from runtime_config import outside_checkout
 from standalone_worker import VERSION
+from bundle_manifest import verify_manifest, write_manifest
 
-ROOT = Path(__file__).resolve().parent
 BRIDGE_SHA256 = "0c641a9a326498e90d9d5f887bfe694d389b8e7ee74857b551c240382431b067"
 ASSETS = (
     "desktop-adapter.js",
@@ -36,6 +37,7 @@ REQUIRED_NOTICES = {
     "openssl-3.0.13-APACHE-2.0.txt",
     "openssl-4.0.2-APACHE-2.0.txt",
     "microsoft-runtime-CPython.txt",
+    "harfbuzz-14.5.0-MIT.txt",
 }
 
 
@@ -76,19 +78,18 @@ def build_environment():
 
 
 def verify_native(executable, bridge):
-    from PyInstaller.archive.readers import CArchiveReader
-
-    archive = CArchiveReader(str(executable))
+    directory = executable.parent / "_internal"
     base = Path(sys.base_prefix)
     expected = {
         "python3.dll": base / "python3.dll",
         "python311.dll": base / "python311.dll",
         "vcruntime140.dll": base / "vcruntime140.dll",
+        "vcruntime140_1.dll": base / "vcruntime140_1.dll",
         "libcrypto-3.dll": base / "DLLs/libcrypto-3.dll",
         "libssl-3.dll": base / "DLLs/libssl-3.dll",
         "libffi-8.dll": base / "DLLs/libffi-8.dll",
     }
-    dlls = {name.lower(): name for name in archive.toc if name.lower().endswith(".dll")}
+    dlls = {p.name.lower(): p for p in directory.rglob("*.dll")}
     if set(dlls) != set(expected):
         raise ValueError(
             "Unreviewed native library inventory: "
@@ -96,9 +97,9 @@ def verify_native(executable, bridge):
             f"missing={sorted(set(expected) - set(dlls))}"
         )
     for name, path in expected.items():
-        if archive.extract(dlls[name]) != path.read_bytes():
+        if dlls[name].read_bytes() != path.read_bytes():
             raise ValueError(f"Bundled library differs from the Python runtime: {name}")
-    if archive.extract("pdfsign-bridge.exe") != bridge.read_bytes():
+    if (directory / "pdfsign-bridge.exe").read_bytes() != bridge.read_bytes():
         raise ValueError("Bundled bridge differs from the pinned release.")
 
 
@@ -156,12 +157,7 @@ def build(destination, bridge, reuse_executable=False, linux_bundle=None):
     if linux_bundle is None:
         raise ValueError("Supply the Linux bundle for the combined plugin.")
     linux_runtime = linux_bundle / "native/linux-x86_64"
-    linux_manifest = json.loads((linux_runtime / "manifest.json").read_text())
-    if linux_manifest["version"] != VERSION or linux_manifest["sha256"] != hashlib.sha256((linux_runtime / "cac-signer").read_bytes()).hexdigest():
-        raise ValueError("Linux runtime version or checksum differs from its manifest.")
-    for name, digest in linux_manifest["runtimeSources"].items():
-        if Path(name).name != name or hashlib.sha256((ROOT / name).read_bytes()).hexdigest() != digest:
-            raise ValueError("Linux worker has stale runtime source: " + name)
+    verify_manifest(linux_runtime, ROOT)
     destination = outside_checkout(destination)
     destination.mkdir(parents=True, exist_ok=True)
     count, findings = audit(ROOT, include_release=False)
@@ -172,7 +168,7 @@ def build(destination, bridge, reuse_executable=False, linux_bundle=None):
             "The signing bridge does not match the pinned upstream release."
         )
     notices = licenses()
-    executable = destination / "dist" / "cac-signer.exe"
+    executable = destination / "dist" / "cac-signer" / "cac-signer.exe"
     if not reuse_executable:
         command = [
             sys.executable,
@@ -181,19 +177,21 @@ def build(destination, bridge, reuse_executable=False, linux_bundle=None):
             "PyInstaller",
             "--noconfirm",
             "--clean",
-            "--onefile",
+            "--onedir",
             "--console",
             "--noupx",
             "--name",
             "cac-signer",
             "--distpath",
-            str(executable.parent),
+            str(executable.parent.parent),
             "--workpath",
             str(destination / "work"),
             "--specpath",
             str(destination),
             "--add-binary",
             str(bridge.resolve()) + os.pathsep + ".",
+            "--add-data",
+            str(ROOT / "fonts") + os.pathsep + "fonts",
             "--collect-data",
             "pyhanko",
             "--collect-data",
@@ -201,6 +199,9 @@ def build(destination, bridge, reuse_executable=False, linux_bundle=None):
             str(ROOT / "standalone_worker.py"),
         ]
         subprocess.run(command, cwd=destination, env=build_environment(), check=True)
+        write_manifest(executable.parent, ROOT, "win32", "x86_64")
+    else:
+        verify_manifest(executable.parent, ROOT)
     verify_native(executable, bridge)
     check = subprocess.run(
         [str(executable)],
@@ -236,7 +237,9 @@ def build(destination, bridge, reuse_executable=False, linux_bundle=None):
         archive.write(ROOT / "plugin/standalone.html", "standalone.html")
         for name in ASSETS:
             archive.write(ROOT / "plugin" / name, name)
-        archive.write(executable, "native/cac-signer.exe")
+        for path in sorted(executable.parent.rglob("*")):
+            if path.is_file():
+                archive.write(path, "native/" + path.relative_to(executable.parent).as_posix())
         if linux_bundle:
             for path in sorted(linux_bundle.rglob("*")):
                 if path.is_file():

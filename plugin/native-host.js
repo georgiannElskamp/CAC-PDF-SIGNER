@@ -5,33 +5,36 @@
   function send(data) {
     parent.postMessage({ channel, ...data }, "*");
   }
-  function executable() {
+  function workerLaunch() {
     let own = location.href.replace(/^onlyoffice:\/\/plugin\//, "");
     if (own.startsWith("/")) own = "file://" + own;
     const url = new URL("native/cac-signer.exe", own);
-    if (url.protocol !== "file:" || url.hostname)
+    if (url.protocol !== "file:")
       throw new Error(
         "Install this plugin locally through ONLYOFFICE Plugin Manager.",
       );
-    if (!/^\/[A-Za-z]:\//.test(url.pathname)) {
+    if (!/^\/[A-Za-z]:\//.test(url.pathname) && !url.hostname) {
       if (!/Linux/.test(navigator.platform || ""))
         throw new Error("This package supports Windows and Linux desktop editors.");
       const launcher = decodeURIComponent(new URL("launch-linux.sh", own).pathname);
       if (!launcher.startsWith("/") || /[\r\n\0]/.test(launcher))
         throw new Error("Unsupported plugin installation path.");
-      return '/bin/sh "' + launcher.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
+      return {
+        command: '/bin/sh "' + launcher.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"',
+        env: {},
+      };
     }
-    const path = decodeURIComponent(url.pathname)
+    const path = (url.hostname ? "\\\\" + url.hostname : "") + decodeURIComponent(url.pathname)
       .replace(/^\/([A-Za-z]:)/, "$1")
       .replace(/\//g, "\\");
-    if (!/^[A-Za-z]:\\/.test(path) || /[\r\n"]/g.test(path))
+    if (!/^(?:[A-Za-z]:\\|\\\\[^\\]+\\)/.test(path) || /[\r\n\0"]/.test(path))
       throw new Error("Unsupported plugin installation path.");
-    if (/\s/.test(path)) {
-      throw new Error(
-        "This ONLYOFFICE Windows build cannot launch plugins from paths containing spaces. A Windows profile path without spaces is required.",
-      );
-    }
-    return path;
+    // Tabs bypass the editor's first-space lookup. Short names, when available,
+    // also avoid native loaders' long-path limits without changing OS settings.
+    return {
+      command: 'cmd.exe\t/q\t/d\t/v:off\t/s\t/c\t"for\t%T\tin\t("%TEMP%")\tdo\tset\t"TEMP=%~sT"&for\t%T\tin\t("%TMP%")\tdo\tset\t"TMP=%~sT"&for\t%I\tin\t("%CAC_SIGNER_EXE%")\tdo\t"%~sI""',
+      env: { CAC_SIGNER_EXE: path },
+    };
   }
   function run(id, request) {
     if (active) {
@@ -46,6 +49,18 @@
     let startup;
     let responded = false;
     let inputSent = false;
+    let startupError = "";
+    function classifyStartupError(message) {
+      if (/filename or extension is too long|path too long/i.test(message))
+        return "The Windows runtime path is too long. Install the plugin in a shorter local profile path.";
+      if (/permission denied|operation not permitted|failed to map segment|access is denied/i.test(message))
+        return "The operating system blocked the signing runtime. Check plugin file permissions and application execution policy.";
+      if (/GLIBC_|GLIBCXX_|version .* not found|Exec format error|not a valid Win32 application|not compatible with the version of Windows/i.test(message))
+        return "The bundled runtime is not compatible with this system's libraries or CPU architecture.";
+      if (/failed to load Python|libpython|shared libraries|cannot find|not found/i.test(message))
+        return "A required signing-runtime file could not load. Check that Plugin Manager extracted the complete package and that security software has not blocked it.";
+      return "";
+    }
     function finish(result) {
       if (responded) return;
       responded = true;
@@ -53,32 +68,37 @@
       send({ type: "result", id, result });
     }
     try {
-      if (!request || !["sign", "health"].includes(request.op))
+      if (!request || !["sign", "health", "preflight"].includes(request.op))
         throw new Error("Unknown CAC operation.");
-      const input = JSON.stringify(request) + "\n";
+      const input = JSON.stringify({ ...request, acknowledgeResult: true }) + "\n";
       if (input.length > 56 * 1024 * 1024)
         throw new Error("The PDF is too large.");
       if (typeof ExternalProcess !== "function")
         throw new Error(
           "This ONLYOFFICE build does not support the bundled CAC component.",
         );
-      process = new ExternalProcess(executable(), {});
+      const launch = workerLaunch();
+      process = new ExternalProcess(launch.command, launch.env);
       active = process;
       startup = setTimeout(() => {
         finish({
           ok: false,
           error:
-            "The bundled signing component did not start. Reinstall the plugin.",
+            startupError || "The signing runtime did not start within 60 seconds. Check application execution policy and the plugin installation.",
         });
         process.end();
         active = null;
-      }, 30000);
+      }, 60000);
       process.onprocess = (type, message) => {
+        if (type === 1 && !inputSent) {
+          startupError = classifyStartupError(String(message).slice(0, 4096)) || startupError;
+          return;
+        }
         if (type === 2) {
           finish({
             ok: false,
             error:
-              "The signing component stopped before completion. Any signed recovery copy is retained; click the field to retry.",
+              startupError || "The signing component stopped before completion. Any signed recovery copy is retained; click the field to retry.",
           });
           if (active === process) active = null;
           setTimeout(() => process.end(), 0);
@@ -126,6 +146,7 @@
           }
           writeChunk();
         } else if (response.event === "result") {
+          try { process.stdin('{"op":"ack"}\n'); } catch (_) { /* Worker timeout also releases it. */ }
           finish(response);
         }
       };

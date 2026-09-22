@@ -8,6 +8,8 @@ import struct
 import sys
 import zipfile
 from pathlib import Path
+from _paths import ROOT
+from bundle_manifest import source_hashes
 
 FORBIDDEN_SUFFIXES = {
     ".pdf",
@@ -112,7 +114,7 @@ def audit_release(root):
                 raise ValueError("Bundled source inventory differs from the repository.")
             for name, path in files.items():
                 packaged, local = archive.read("source/" + name), path.read_bytes()
-                if path.suffix.lower() != ".png":
+                if path.suffix.lower() not in (".png", ".ttf", ".otf"):
                     # Git normalizes text line endings on checkout.
                     packaged = packaged.replace(b"\r\n", b"\n")
                     local = local.replace(b"\r\n", b"\n")
@@ -136,6 +138,7 @@ def audit_release(root):
                 if path.is_file() and archive.read(path.relative_to(root).as_posix()) != path.read_bytes():
                     raise ValueError("Bundled native dependency notices differ.")
             allowed = assets | {"config.json", "bundle.js", "native/cac-signer.exe",
+                                "native/manifest.json",
                                 "native/linux-x86_64/cac-signer",
                                 "native/linux-x86_64/manifest.json",
                                 "LICENSE", "THIRD_PARTY_NOTICES.md"}
@@ -151,9 +154,18 @@ def audit_release(root):
                 if hashlib.sha256(archive.read(name)).hexdigest() != item["sha256"]:
                     raise ValueError("Bundled middleware source checksum differs: " + name)
             allowed |= set(native_sources)
-            linux_manifest = json.loads(archive.read("native/linux-x86_64/manifest.json"))
-            if linux_manifest["version"] != config["version"] or hashlib.sha256(archive.read("native/linux-x86_64/cac-signer")).hexdigest() != linux_manifest["sha256"]:
-                raise ValueError("Linux worker checksum or version differs.")
+            for prefix in ("native/", "native/linux-x86_64/"):
+                manifest = json.loads(archive.read(prefix + "manifest.json"))
+                if manifest["version"] != config["version"] or manifest.get("format") != "onedir":
+                    raise ValueError("Native worker version or format differs.")
+                if manifest["runtimeSources"] != source_hashes(root):
+                    raise ValueError("Native worker source manifest is stale.")
+                for name, digest in manifest["files"].items():
+                    if name.startswith("/") or ".." in name.split("/") or "\\" in name or ":" in name:
+                        raise ValueError("Unsafe native manifest path.")
+                    if hashlib.sha256(archive.read(prefix + name)).hexdigest() != digest:
+                        raise ValueError("Native file checksum differs: " + name)
+                    allowed.add(prefix + name)
             if any(n not in allowed and not n.startswith(("source/", "licenses/")) for n in names):
                 raise ValueError("Unexpected file in the release archive.")
     except (OSError, ValueError, KeyError, zipfile.BadZipFile) as error:
@@ -164,6 +176,10 @@ def audit_release(root):
 def audit(root, include_release=True):
     problems = []
     count = 0
+    font_hashes = {}
+    manifest = root / "fonts/manifest.json"
+    if manifest.exists():
+        font_hashes = {"fonts/" + item["file"]: item["sha256"] for item in json.loads(manifest.read_text())}
     for path in sorted(root.rglob("*")):
         rel = path.relative_to(root)
         if ".git" in rel.parts:
@@ -193,6 +209,9 @@ def audit(root, include_release=True):
                 "plugin/icon@2x.png",
             ) or not png_has_only_image_chunks(data):
                 problems.append((str(rel), "unreviewed image or image metadata"))
+        elif path.suffix.lower() in (".ttf", ".otf"):
+            if font_hashes.get(rel.as_posix()) != hashlib.sha256(data).hexdigest():
+                problems.append((str(rel), "unreviewed or changed font"))
         elif path.suffix.lower() not in TEXT_SUFFIXES and path.name not in TEXT_NAMES:
             problems.append((str(rel), "unexpected file type"))
         else:
@@ -212,7 +231,7 @@ if __name__ == "__main__":
     sys.dont_write_bytecode = True
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "directory", nargs="?", type=Path, default=Path(__file__).resolve().parent
+        "directory", nargs="?", type=Path, default=ROOT
     )
     args = parser.parse_args()
     count, problems = audit(args.directory.resolve())

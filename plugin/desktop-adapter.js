@@ -11,8 +11,12 @@ window.CACDesktop = function (host) {
     String(api.asc_getPdfProps).replace(/\s/g, "") !==
       fingerprint.replace(/\s/g, "")
   ) {
+    let version = "unknown";
+    try {
+      if (api && typeof api.GetVersion === "function") version = api.GetVersion();
+    } catch (_) {}
     throw new Error(
-      "This ONLYOFFICE version needs a CAC adapter update. No document was signed.",
+      "ONLYOFFICE " + version + " needs a CAC adapter update. This plugin was tested with Desktop Editors 9.4.0.129. No document was signed.",
     );
   }
   const hooked = new Map();

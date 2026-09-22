@@ -15,12 +15,32 @@ class PageTextStamp(stamp.TextStamp):
     def _render_inner_content(self):
         params = self.get_default_text_params()
         params.update(self.text_params or {})
+        details = self.style.stamp_text % params
+        unicode_text = None
+        try:
+            encode_text(params["name"] + details)
+        except ValueError:
+            from unicode_font import UnicodeText
+
+            unicode_text = UnicodeText(self.writer, params["name"] + details)
+        font_options = dict(measure=unicode_text.measure, metrics=unicode_text.metrics) if unicode_text else {}
         name, details = signature_layout(
             self.box.width,
             self.box.height,
             params["name"],
-            self.style.stamp_text % params,
+            details,
+            **font_options,
         )
+        if unicode_text:
+            for index, engine in enumerate(unicode_text.engines):
+                self.set_resource(ResourceType.FONT, generic.pdf_name(f"/SignatureFont{index}"), engine.as_resource())
+            commands = [b"q 0 g"]
+            for block in (name, details):
+                for index, line in enumerate(block.lines):
+                    commands.append(unicode_text.draw(line, block.font_size, block.x,
+                                                     block.first_baseline - index * block.leading))
+            commands.append(b"Q")
+            return commands
         self.set_resource(
             ResourceType.FONT,
             generic.pdf_name("/SignatureFont"),

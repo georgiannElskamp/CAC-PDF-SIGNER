@@ -44,10 +44,14 @@ def bridge_call(bridge, request, timeout=180):
 
 
 def certificates(bridge):
-    return (
+    from windows_csp import certificates as legacy_certificates
+
+    modern = (
         bridge_call(bridge, {"cmd": "listCertificates"}, timeout=25).get("certificates")
         or []
     )
+    known = {item["thumbprint"].lower() for item in modern}
+    return modern + [item for item in legacy_certificates() if item["thumbprint"].lower() not in known]
 
 
 class CardSigner(signers.Signer):
@@ -74,6 +78,7 @@ class CardSigner(signers.Signer):
             current = issuer
         super().__init__(signing_cert=cert, cert_registry=registry, embed_roots=False)
         self.thumbprint = info["thumbprint"]
+        self.provider = info.get("provider", "cng")
         self.public_key = crypto_x509.load_der_x509_certificate(cert_der).public_key()
 
     async def async_sign_raw(self, data, digest_algorithm, dry_run=False):
@@ -82,16 +87,18 @@ class CardSigner(signers.Signer):
         if dry_run:
             return bytes(512)
         digest = hashlib.sha256(data).digest()
-        result = await asyncio.to_thread(
-            bridge_call,
-            self.bridge,
-            {
-                "cmd": "signDigest",
-                "thumbprint": self.thumbprint,
-                "digest": base64.b64encode(digest).decode(),
-            },
-        )
-        signature = base64.b64decode(result["signature"], validate=True)
+        if self.provider == "csp":
+            from windows_csp import sign_digest
+
+            signature = await asyncio.to_thread(sign_digest, self.thumbprint, digest)
+        else:
+            result = await asyncio.to_thread(
+                bridge_call,
+                self.bridge,
+                {"cmd": "signDigest", "thumbprint": self.thumbprint,
+                 "digest": base64.b64encode(digest).decode()},
+            )
+            signature = base64.b64decode(result["signature"], validate=True)
         if isinstance(self.public_key, rsa.RSAPublicKey):
             self.public_key.verify(signature, data, padding.PKCS1v15(), hashes.SHA256())
         elif isinstance(self.public_key, ec.EllipticCurvePublicKey):

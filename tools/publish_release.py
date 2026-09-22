@@ -4,11 +4,10 @@ import argparse
 import json
 import re
 import subprocess
-from pathlib import Path
 
+from _paths import ROOT
 from audit_public import audit
 
-ROOT = Path(__file__).resolve().parent
 ASSETS = ("CAC-PDF-Signer.plugin", "SHA256SUMS.txt", "INSTALL.txt")
 
 

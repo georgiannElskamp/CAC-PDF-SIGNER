@@ -7,6 +7,28 @@ from ctypes import wintypes as W
 from asn1crypto import x509
 
 
+def reader_is_present(reader):
+    scard = C.WinDLL("winscard")
+    handle = C.c_void_p
+
+    class ReaderState(C.Structure):
+        _fields_ = [("reader", W.LPCWSTR), ("user", handle), ("current", W.DWORD),
+                    ("event", W.DWORD), ("atr_length", W.DWORD), ("atr", C.c_ubyte * 36)]
+
+    scard.SCardEstablishContext.argtypes = [W.DWORD, handle, handle, C.POINTER(handle)]
+    scard.SCardGetStatusChangeW.argtypes = [handle, W.DWORD, C.POINTER(ReaderState), W.DWORD]
+    scard.SCardReleaseContext.argtypes = [handle]
+    context = handle()
+    if not reader or scard.SCardEstablishContext(0, None, None, C.byref(context)):
+        return False
+    try:
+        state = ReaderState(reader=reader)
+        return (not scard.SCardGetStatusChangeW(context, 0, C.byref(state), 1)
+                and bool(state.event & 0x20) and not state.event & (0x4 | 0x8 | 0x10 | 0x200))
+    finally:
+        scard.SCardReleaseContext(context)
+
+
 def connected_reader(thumbprint):
     crypt = C.WinDLL("crypt32", use_last_error=True)
     ncrypt = C.WinDLL("ncrypt")
@@ -127,11 +149,17 @@ def choose_certificate(candidates, reader_check=connected_reader):
             units = [units]
         if not any(str(unit).upper() == "DOD" for unit in units):
             continue
-        if reader_check(info["thumbprint"]):
+        if info.get("provider") == "csp":
+            from windows_csp import reader_for_certificate
+
+            present = reader_is_present(reader_for_certificate(info["thumbprint"]))
+        else:
+            present = reader_check(info["thumbprint"])
+        if present:
             eligible.append(info)
     if not eligible:
         raise ValueError(
-            "Insert your CAC. Its document-signing certificate must be available on a connected card reader."
+            "No usable CAC signing certificate was found. Check that the reader is connected, the card's certificates appear in your Windows account, and its CNG or RSA smart-card provider is installed."
         )
     if len(eligible) != 1:
         raise ValueError(

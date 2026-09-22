@@ -8,4 +8,6 @@
 *.cmd text eol=crlf
 *.sh text eol=lf
 *.png binary
+*.ttf binary
+*.otf binary
 licenses/*.txt text eol=lf
