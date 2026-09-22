@@ -158,6 +158,7 @@ jobs:
             ${{ runner.temp }}/report/result-simulation.json
             ${{ runner.temp }}/report/signing-result.json
             ${{ runner.temp }}/report/signed-preview.png
+            ${{ runner.temp }}/report/field-screen.png
           retention-days: 14
           if-no-files-found: error
   report:

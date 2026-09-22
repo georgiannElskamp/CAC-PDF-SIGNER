@@ -8,7 +8,7 @@ from PIL import Image
 
 image = Image.open(sys.argv[1]).convert("RGB")
 rows = []
-for y in range(160, image.height - 30):
+for y in range(image.height - 30):
     runs, start = [], None
     for x in range(image.width):
         white = min(image.getpixel((x, y))) >= 250

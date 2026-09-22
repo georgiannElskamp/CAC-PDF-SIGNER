@@ -151,6 +151,9 @@ def watch(force=False):
         save_state(state)
         dispatched += 1
     state["lastSuccessfulPoll"] = now()
+    if stale(state.get("lastComponentDispatch"), 168):
+        api(f"/repos/{PUBLIC}/actions/workflows/component-watch.yml/dispatches", "POST", {"ref": "main"}, dispatch=True)
+        state["lastComponentDispatch"] = now()
     save_state(state)
     print(f"Dispatched {dispatched}; waiting for assets: {len(state['pendingAssets'])}")
 

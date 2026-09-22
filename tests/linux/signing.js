@@ -75,12 +75,12 @@ async function main() {
     console.log("Clicking the signature field in the editor");
     const clickField = async () => {
       await run(() => {
-        if (typeof Asc.editor.asc_setZoom !== "function") throw new Error("Zoom harness needs updating");
-        Asc.editor.asc_setZoom(50);
+        if (typeof Asc.editor.zoom !== "function") throw new Error("Zoom harness needs updating");
+        Asc.editor.zoom(50);
       });
       await delay(1000);
       const screenshot = await call("Page.captureScreenshot", {format:"png"});
-      const screen = "/test/state/field-screen.png";
+      const screen = "/evidence/field-screen.png";
       fs.writeFileSync(screen, Buffer.from(screenshot.data, "base64"));
       const point = JSON.parse(cp.execFileSync("python3", ["/repo/tests/linux/field_point.py", screen], {encoding:"utf8"}));
       await call("Input.dispatchMouseEvent", {type:"mouseMoved", x:point.x, y:point.y});

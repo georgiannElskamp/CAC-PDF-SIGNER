@@ -26,7 +26,7 @@ class SchedulerTests(unittest.TestCase):
         approved = {"sha256": "b" * 64}
         commit = "c" * 40
         key = scheduler.fingerprint(scheduler.manifest(release), approved, commit)
-        state = {"records": {key: {"status": "completed", "conclusion": "failure"}}}
+        state = {"records": {key: {"status": "completed", "conclusion": "failure"}}, "lastComponentDispatch": scheduler.now()}
         def request(path, *args, **kwargs):
             if path.endswith("commits/main"):
                 return {"sha": commit}

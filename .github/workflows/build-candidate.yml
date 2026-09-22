@@ -61,6 +61,7 @@ jobs:
             ${{ runner.temp }}/candidate/INSTALL.txt
             ${{ runner.temp }}/candidate/editor.json
             ${{ runner.temp }}/candidate/metadata.json
+            ${{ runner.temp }}/candidate/components.cdx.json
           retention-days: 14
           if-no-files-found: error
   validate:

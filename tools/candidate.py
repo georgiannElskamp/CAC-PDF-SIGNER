@@ -11,6 +11,7 @@ import zipfile
 from _paths import ROOT
 from automation import download
 from audit_public import audit
+from watch_components import inventory
 
 BRIDGE_URL = "https://github.com/192d-Wing/pdf-sign/releases/download/v0.1.0/pdfsign-bridge_0.1.0_windows_amd64.zip"
 BRIDGE_ARCHIVE_SHA256 = "c65fde8bed039378f13ef663781bee2498e4418cb2361a4e94759e39ef5b4910"
@@ -50,6 +51,7 @@ def finish(directory):
                            "sha256": hashlib.sha256((directory / "CAC-PDF-Signer.plugin").read_bytes()).hexdigest()},
                 "harness": os.environ["GITHUB_SHA"], "candidate": True}
     (directory / "metadata.json").write_text(json.dumps(metadata, indent=2) + "\n")
+    (directory / "components.cdx.json").write_text(json.dumps(inventory(), indent=2) + "\n")
 
 
 if __name__ == "__main__":
