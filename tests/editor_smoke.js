@@ -75,13 +75,20 @@ async function smoke(port, packagePath, version) {
     await call("Runtime.enable");
     context = await until(async () => {
       for (const id of contexts) {
-        if (await evaluate(id, "typeof PDFE !== 'undefined' && typeof Asc !== 'undefined' && !!Asc.editor?.jf?.file?.Mp")) return id;
+        try {
+          if (await evaluate(id, "typeof PDFE !== 'undefined' && typeof Asc !== 'undefined' && !!Asc.editor?.jf?.file?.Mp")) return id;
+        } catch (error) {
+          if (!/context.*(find|destroy)|find.*context/i.test(error.message)) throw error;
+        }
       }
       return null;
     }, "The tested PDF editor interface is unavailable.");
     assert.equal(await run((guid) => JSON.parse(AscDesktopEditor.GetInstallPlugins()).some((g) => (g.pluginsData || []).some((p) => p.guid === guid)), GUID), false,
       "CAC is already installed. Use a disposable profile.");
-    const initial = await run(() => Asc.editor.jf.file.Mp.getInteractiveFormsInfo().Fields.map((f) => ({ name: f.name, type: f.type, signed: !!f.Sig })));
+    const initial = await until(() => run(() => {
+      const fields = Asc.editor.jf.file.Mp.getInteractiveFormsInfo()?.Fields;
+      return fields?.length ? fields.map((f) => ({ name: f.name, type: f.type, signed: !!f.Sig })) : null;
+    }), "The installation fixture's signature field did not load.");
     assert.deepEqual(initial, [{ name: "InstallationTest", type: 33, signed: false }], "Open only the generated installation fixture.");
     for (let cycle = 0; cycle < 2; cycle++) {
       installed = true;

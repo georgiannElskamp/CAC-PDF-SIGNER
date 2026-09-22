@@ -1,7 +1,7 @@
 {
   "name": "CAC PDF Signer",
   "guid": "asc.{9A58C737-A6B4-4E31-8D3F-2C940B716EF9}",
-  "version": "0.7.0-rc.2",
+  "version": "0.7.0-rc.3",
   "minVersion": "9.4.0",
   "variations": [
     {

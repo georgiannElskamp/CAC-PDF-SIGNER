@@ -52,6 +52,10 @@ def check(package):
             try:
                 subprocess.run(["node", str(root / "tests/editor_smoke.js"), "--disposable-profile", "9251", str(package.resolve()), version],
                                check=True, timeout=360)
+            except Exception:
+                log.flush()
+                print((work / "editor.log").read_bytes()[-8000:].decode("utf-8", "replace"), file=sys.stderr)
+                raise
             finally:
                 if sys.platform == "win32":
                     subprocess.run(["taskkill", "/PID", str(child.pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

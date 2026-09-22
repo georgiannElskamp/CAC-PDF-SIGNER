@@ -18,7 +18,11 @@ python -B tools/verify_package.py release/CAC-PDF-Signer.plugin
 
 To run the editor smoke test elsewhere, use a disposable OS account or Linux XDG profile. Generate its only PDF with `node tests/editor_smoke.js --fixture <pdf-path>`, open it in ONLYOFFICE with `--remote-debugging-port=9251`, then run `node tests/editor_smoke.js --disposable-profile 9251 <absolute-plugin-path> <version>`. The tool refuses an existing CAC installation and other PDF fields. Close the test editor afterward; remote debugging should not be enabled during normal signing.
 
-## 0.7.0-rc.2 validation
+## Current candidate
+
+Version 0.7.0-rc.3 retains the rc.2 signing code and fixes draft-asset access in the release workflow. Its source, packaged-worker and editor-installation results are recorded by GitHub Actions. The local rc.2 checks below establish the previous baseline; hardware signing is still pending for this candidate.
+
+### 0.7.0-rc.2 baseline
 
 | Check | Result |
 | --- | --- |

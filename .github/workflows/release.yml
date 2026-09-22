@@ -51,41 +51,14 @@ jobs:
           fi
   packaged-runtime:
     needs: checks
-    strategy:
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    env:
-      GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      RELEASE_TAG: ${{ inputs.tag }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: refs/tags/${{ inputs.tag }}
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: '3.11'
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: '22'
-      - name: Run the uploaded native runtime
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh release download "$RELEASE_TAG" --pattern CAC-PDF-Signer.plugin --dir release
-          python -B tools/verify_package.py release/CAC-PDF-Signer.plugin
-  editor-installation:
-    needs: packaged-runtime
-    timeout-minutes: 20
+    permissions:
+      contents: write # GitHub requires push access to read draft release assets.
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     env:
-      GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ inputs.tag }}
     steps:
@@ -101,6 +74,39 @@ jobs:
           node-version: '22'
       - name: Download the draft plugin
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release download "$RELEASE_TAG" --pattern CAC-PDF-Signer.plugin --dir release
+      - name: Run the uploaded native runtime
+        run: python -B tools/verify_package.py release/CAC-PDF-Signer.plugin
+  editor-installation:
+    needs: packaged-runtime
+    timeout-minutes: 20
+    permissions:
+      contents: write # GitHub requires push access to read draft release assets.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      GH_REPO: ${{ github.repository }}
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+      - name: Download the draft plugin
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: gh release download "$RELEASE_TAG" --pattern CAC-PDF-Signer.plugin --dir release
       - name: Prepare the Linux display
         if: runner.os == 'Linux'
