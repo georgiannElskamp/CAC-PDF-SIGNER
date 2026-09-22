@@ -15,13 +15,13 @@ python -B tools/build_standalone.py --output ..\standalone-build --bridge ..\pdf
 
 The Linux bundle must be built first. The combined builder checks the bridge and license hashes, DLL inventory, dependency imports and both runtime manifests. It writes `CAC-PDF-Signer.plugin` and `SHA256SUMS.txt` outside the checkout.
 
-`--reuse-executable` only repackages assets and source when the frozen worker's input hashes still match. Runtime code, dependency or font changes require rebuilding the worker. Documentation and build-tool changes do not alter the signing runtime.
+`--reuse-executable` only repackages assets and source when the frozen worker's input hashes still match. Runtime code, dependency, build-tool or font changes require rebuilding the worker. Documentation-only changes can reuse a matching worker.
 
 The build limits native-library lookup to Python and Windows directories. Windows supplies the Universal CRT and API-set libraries. Changes to Python, OpenSSL or native libraries require reviewing their notices and pinned inventory.
 
 ## Linux worker
 
-Build in isolated x86_64 Linux with glibc 2.28 and GCC 8.3 or a compatible compiler. `native_linux/runtime.json` pins Python. Install `requirements-linux.txt`, PyInstaller 6.19.0, Meson and Ninja into its environment. Native build tools include make, pkg-config, flex, autoconf, automake, libtool, Perl and binutils (`readelf`).
+Build in isolated x86_64 Linux with glibc 2.28 and GCC 8.3 or a compatible compiler. `native_linux/runtime.json` pins Python. Install both `requirements-build.txt` and `requirements-linux.txt`, plus Meson and Ninja, into its environment. This uses the same PyInstaller pin as Windows. Native build tools include make, pkg-config, flex, autoconf, automake, libtool, Perl and binutils (`readelf`).
 
 Download the archives listed in `native_linux/sources.json` into `/opt/src`, then run `sh native_linux/build_middleware.sh`. The script verifies source checksums and builds into `/opt/native`. `CAC_NATIVE_PREFIX`, `CAC_NATIVE_SOURCES` and `CAC_NATIVE_WORK` can select other absolute paths. Use fresh output and work directories.
 
