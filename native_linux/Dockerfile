@@ -1,6 +1,6 @@
 FROM debian:10@sha256:2a0c1b9175adf759420fe0fbd7f5b449038319171eb76554bb76cbe172b62b42
 ENV DEBIAN_FRONTEND=noninteractive PYTHONDONTWRITEBYTECODE=1
-RUN printf 'deb http://archive.debian.org/debian buster main\n' > /etc/apt/sources.list \
+RUN printf 'deb http://archive.debian.org/debian buster main\ndeb http://archive.debian.org/debian-security buster/updates main\n' > /etc/apt/sources.list \
     && rm -f /etc/apt/sources.list.d/* \
     && apt-get -o Acquire::Check-Valid-Until=false update \
     && apt-get install -y --no-install-recommends ca-certificates curl jq xz-utils \
