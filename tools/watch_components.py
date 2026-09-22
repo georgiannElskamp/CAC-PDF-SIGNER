@@ -68,6 +68,7 @@ def numeric_tag(tag):
 
 def watch(output):
     rows, errors = [], []
+    updates = False
     for item in components():
         try:
             repo = item["repository"]
@@ -87,6 +88,7 @@ def watch(output):
             if not versions:
                 raise ValueError("No matching stable upstream version")
             latest = max(versions)
+            updates |= latest > pinned
             state = "Update available" if latest > pinned else "Current on tracked line"
             rows.append(f"| {item['name']} | {item['version']} | {'.'.join(map(str, latest))} | {state} |")
         except Exception as error:
@@ -98,6 +100,8 @@ def watch(output):
             upstream = hashlib.sha256(response.read(5 * 1024 * 1024)).hexdigest()
         pinned = hashlib.sha256((ROOT / "plugin/plugins.js").read_bytes()).hexdigest()
         sdk_status = "unchanged" if upstream == pinned else "changed; review upstream before replacing"
+        updates |= upstream != pinned
+        sdk_status += f" (bundled SHA-256 `{pinned}`; upstream SHA-256 `{upstream}`)"
     except Exception as error:
         sdk_status = "unknown"
         errors.append("SDK: " + str(error))
@@ -111,7 +115,9 @@ def watch(output):
                     advisories.append(f"- [{item['ghsa_id']}]({item['html_url']}) ({repo}); applicability requires review.")
         except Exception as error:
             errors.append(repo + " advisories: " + str(error))
-    body = ("| Component | Pinned | Latest tracked | Status |\n| --- | --- | --- | --- |\n" + "\n".join(rows) +
+    attention = bool(updates or advisories or errors)
+    body = (("**Review required.**" if attention else "**No changes detected in tracked components.**") +
+            "\n\n| Component | Pinned | Latest tracked | Status |\n| --- | --- | --- | --- |\n" + "\n".join(rows) +
             f"\n\nONLYOFFICE bootstrap SDK: {sdk_status}.\n\n"
             "Recent published repository advisories (90 days):\n" + ("\n".join(advisories) or "None returned by these repositories.") +
             "\n\nCoverage limits: this is a version watch and advisory feed, not an exhaustive vulnerability scan. "
@@ -122,7 +128,7 @@ def watch(output):
     output.mkdir(parents=True, exist_ok=True)
     (output / "components.cdx.json").write_text(json.dumps(inventory(), indent=2) + "\n")
     (output / "component-report.md").write_text(body + "\n")
-    upsert_issue("components", "Bundled component watch", body)
+    upsert_issue("components", "Bundled component watch", body, state="open" if attention else "closed")
     if errors:
         raise SystemExit("Some component checks were unavailable; see the report")
 

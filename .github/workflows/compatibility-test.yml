@@ -211,7 +211,7 @@ jobs:
       - name: Update compatibility issue
         env:
           GH_TOKEN: ${{ github.token }}
-          PREREQUISITES: '{"source":"${{ needs.source.result }}","package":"${{ needs.package-audit.result }}"}'
+          PREREQUISITES: '{"source":"${{ needs.source.result }}","package":"${{ needs.package-audit.result }}","desktop":"${{ needs.desktop.result }}","simulation":"${{ needs.simulation.result }}"}'
         run: python3 -B tools/automation.py report "$RUNNER_TEMP/reports"
       - name: Require source and package checks
         env:
