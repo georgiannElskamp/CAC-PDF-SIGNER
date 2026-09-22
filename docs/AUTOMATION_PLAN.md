@@ -20,7 +20,7 @@ Approved design: GitHub-hosted execution only. The desktop may be powered off. O
 - [x] Windows and Linux source suites pass on GitHub.
 - [x] Exact approved package audit passes against its release commit.
 - [x] Published plugin installation, background startup, removal and reinstallation pass on both hosted platforms.
-- [x] Both workers build from a cold cache on GitHub and the resulting package passes native/runtime and installation checks.
+- [x] Both workers build from a cold cache on GitHub; the resulting package passes native/runtime, installation and simulated signing checks in the [full candidate run](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/actions/runs/35768968046).
 - [x] Component watcher creates one report issue and identifies current Python/SDK review items.
 - [x] Unit checks reject incomplete/mismatched release metadata, preserve uncertain dispatch intent and suppress duplicate dispatches.
 - [x] Both repositories have zero self-hosted runners; no desktop automation was created.
