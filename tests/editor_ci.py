@@ -16,16 +16,30 @@ import urllib.request
 
 def stop_windows_editor(directory):
     # The launcher can exit before its editor and helper processes.
-    literal = "'" + str(Path(directory).resolve()).replace("'", "''") + "'"
-    cleanup = (
-        "$ErrorActionPreference='Stop'; $root=" + literal + "; "
-        "$root=[IO.Path]::GetFullPath($root).TrimEnd('\\')+'\\'; "
-        "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and "
-        "$_.ExecutablePath.StartsWith($root,[StringComparison]::OrdinalIgnoreCase) } | "
-        "ForEach-Object { $p=Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; "
-        "if ($p) { $p | Stop-Process -Force -ErrorAction SilentlyContinue; $p | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue } }"
-    )
-    subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", cleanup], check=True, timeout=45)
+    root = Path(directory).resolve(strict=True)
+    powershell = ["powershell", "-NoProfile", "-NonInteractive", "-Command"]
+    inventory = subprocess.run(powershell + [
+        "[Console]::OutputEncoding=[Text.UTF8Encoding]::new(); "
+        "ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process | "
+        "Select-Object ProcessId,ExecutablePath)"
+    ], check=True, timeout=30, capture_output=True, encoding="utf-8")
+    identifiers = []
+    for process in json.loads(inventory.stdout):
+        path = process.get("ExecutablePath")
+        if not path:
+            continue
+        try:
+            executable = Path(path).resolve(strict=True)
+        except OSError:
+            continue
+        if root in executable.parents:
+            identifiers.append(str(int(process["ProcessId"])))
+    if identifiers:
+        subprocess.run(powershell + [
+            "Get-Process -Id " + ",".join(identifiers) + " -ErrorAction SilentlyContinue | "
+            "ForEach-Object { $_ | Stop-Process -Force -ErrorAction SilentlyContinue; "
+            "$_ | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue }"
+        ], check=True, timeout=45)
 
 
 def check(package):

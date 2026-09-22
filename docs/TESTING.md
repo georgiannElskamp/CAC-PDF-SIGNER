@@ -20,7 +20,7 @@ To run the editor smoke test elsewhere, use a disposable OS account or Linux XDG
 
 ## Current candidate
 
-Version 0.7.0-rc.4 retains the rc.2 signing code and corrects draft-asset access, Linux editor launch and Windows test-process cleanup in the release workflow. Its source, packaged-worker and editor-installation results are recorded by GitHub Actions. The local rc.2 checks below establish the previous baseline; hardware signing is still pending for this candidate.
+Version 0.7.0-rc.5 retains the rc.2 signing code and corrects draft-asset access, Linux editor launch and Windows test-process cleanup in the release workflow. Its source, packaged-worker and editor-installation results are recorded by GitHub Actions. The local rc.2 checks below establish the previous baseline; hardware signing is still pending for this candidate.
 
 ### 0.7.0-rc.2 baseline
 

@@ -1,3 +1,4 @@
+import ctypes
 import os
 from pathlib import Path
 import shutil
@@ -16,9 +17,12 @@ class EditorCleanupTests(unittest.TestCase):
             root = Path(directory)
             binary = root / "helper.exe"
             shutil.copyfile(Path(os.environ["SystemRoot"]) / "System32/ping.exe", binary)
+            alias = ctypes.create_unicode_buffer(32768)
+            length = ctypes.windll.kernel32.GetShortPathNameW(str(binary), alias, len(alias))
+            self.assertTrue(0 < length < len(alias))
             log = root / "editor.log"
             with log.open("wb") as stream:
-                child = subprocess.Popen([str(binary), "-t", "127.0.0.1"], stdout=stream,
+                child = subprocess.Popen([alias.value, "-t", "127.0.0.1"], stdout=stream,
                                          stderr=stream, creationflags=subprocess.CREATE_NO_WINDOW)
             try:
                 self.assertIsNone(child.poll())
