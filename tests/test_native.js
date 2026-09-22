@@ -142,10 +142,15 @@ function hostTest() {
     JSON.stringify({ event: "result", ok: true, saved: true }),
   );
   assert(process.input.endsWith('{"op":"ack"}\n'));
+  assert.equal(h.sent.filter((x) => x.type === "result").length, 0,
+    "Do not release the client while its completed worker is still exiting.");
   process.onprocess(2, "");
   for (const timer of h.timers.values()) timer();
-  assert(process.ended);
+  assert(!process.ended, "The editor already cleans up an exited worker.");
   assert.equal(h.sent.filter((x) => x.type === "result").length, 1);
+  assert.equal(h.sent.at(-1).result.saved, true);
+  h.handlers.unload();
+  assert(!process.ended, "Closing a completed client must not race native cleanup.");
   h.handlers.message({
     ...event,
     data: { ...event.data, request: { op: "execute", command: "bad" } },
@@ -159,6 +164,11 @@ function hostTest() {
   });
   crash.context.process.onprocess(2, "");
   assert.match(crash.sent.at(-1).result.error, /stopped before completion/);
+  assert(!crash.context.process.ended);
+  const cancelled = harness("native-host.js");
+  cancelled.handlers.message({ ...event, source: cancelled.context.parent });
+  cancelled.handlers.unload();
+  assert(cancelled.context.process.ended, "Disabling the plugin still stops a running operation.");
   for (const [location, platform, expected] of [
     ["onlyoffice://plugin/file:///tmp/Test%20Folder/plugin/native.html", "Linux x86_64",
       '/bin/sh "/tmp/Test Folder/plugin/launch-linux.sh"'],
