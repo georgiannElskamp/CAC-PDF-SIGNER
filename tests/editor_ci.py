@@ -6,11 +6,26 @@ import json
 import os
 from pathlib import Path
 import platform
+import shutil
 import signal
 import subprocess
 import sys
 import tempfile
 import urllib.request
+
+
+def stop_windows_editor(directory):
+    # The launcher can exit before its editor and helper processes.
+    literal = "'" + str(Path(directory).resolve()).replace("'", "''") + "'"
+    cleanup = (
+        "$ErrorActionPreference='Stop'; $root=" + literal + "; "
+        "$root=[IO.Path]::GetFullPath($root).TrimEnd('\\')+'\\'; "
+        "Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and "
+        "$_.ExecutablePath.StartsWith($root,[StringComparison]::OrdinalIgnoreCase) } | "
+        "ForEach-Object { $p=Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue; "
+        "if ($p) { $p | Stop-Process -Force -ErrorAction SilentlyContinue; $p | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue } }"
+    )
+    subprocess.run(["powershell", "-NoProfile", "-NonInteractive", "-Command", cleanup], check=True, timeout=45)
 
 
 def check(package):
@@ -35,7 +50,10 @@ def check(package):
             editor = Path(os.environ["ProgramFiles"]) / "ONLYOFFICE/DesktopEditors/DesktopEditors.exe"
         else:
             subprocess.run(["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", str(installer)], check=True, timeout=300)
-            editor = Path("/opt/onlyoffice/desktopeditors/DesktopEditors")
+            launcher = shutil.which("onlyoffice-desktopeditors") or shutil.which("desktopeditors")
+            if not launcher:
+                raise RuntimeError("The official ONLYOFFICE launcher was not installed.")
+            editor = Path(launcher)
             profile = work / "Example User é" / "profile"
             profile.mkdir(parents=True)
             runtime = profile / "runtime"
@@ -58,7 +76,7 @@ def check(package):
                 raise
             finally:
                 if sys.platform == "win32":
-                    subprocess.run(["taskkill", "/PID", str(child.pid), "/T", "/F"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    stop_windows_editor(editor.parent)
                 else:
                     try:
                         os.killpg(child.pid, signal.SIGTERM)
