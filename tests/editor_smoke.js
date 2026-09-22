@@ -70,6 +70,8 @@ async function smoke(port, packagePath, version) {
     return reply.result.value;
   }
   let context, installed = false;
+  let stage = "editor startup";
+  const progress = (value) => { stage = value; console.log(`Checking: ${stage}`); };
   const run = (fn, ...args) => evaluate(context, `(${fn.toString()})(${args.map((a) => JSON.stringify(a)).join(",")})`);
   try {
     await call("Runtime.enable");
@@ -91,6 +93,7 @@ async function smoke(port, packagePath, version) {
     }), "The installation fixture's signature field did not load.");
     assert.deepEqual(initial, [{ name: "InstallationTest", type: 33, signed: false }], "Open only the generated installation fixture.");
     for (let cycle = 0; cycle < 2; cycle++) {
+      progress(`install cycle ${cycle + 1}`);
       installed = true;
       assert.equal(await run((file) => AscDesktopEditor.PluginInstall(file), packagePath), true, "Native plugin installation failed.");
       const listed = await until(() => run((guid) => {
@@ -101,6 +104,7 @@ async function smoke(port, packagePath, version) {
         return { version: config.version, type: config.variations[0].type };
       }, GUID), "The plugin was not listed under Background plugins.");
       assert.deepEqual(listed, { version, type: "background" });
+      progress("background startup");
       await run((guid) => {
         if (!Asc.editor.getUsedBackgroundPlugins().includes(guid)) Asc.editor.asc_pluginRun(guid, 0, "");
       }, GUID);
@@ -108,6 +112,7 @@ async function smoke(port, packagePath, version) {
         const fields = Asc.editor.jf.Qd().lC.filter((w) => w.type === 33);
         return fields.length === 1 && fields.every((w) => String(w.Vh).includes("onClick(f.name)"));
       }), "The background plugin did not finish preflight and attach its field handler.");
+      progress("native preflight");
       const result = await run(async (guid) => {
         const frame = document.getElementById("iframe_" + guid);
         const client = frame.contentWindow.CACNativeClient();
@@ -118,10 +123,12 @@ async function smoke(port, packagePath, version) {
       assert.equal(result.desktopReady, true);
       assert.equal(result.recoveryWritable, true);
       assert.equal(result.cardChecked, false);
+      progress("disable");
       await run((guid) => Asc.editor.asc_pluginStop(guid), GUID);
       await until(() => run((guid) => !document.getElementById("iframe_" + guid) &&
         Asc.editor.jf.Qd().lC.every((w) => /^function\(\)\{\}$/.test(String(w.Vh).replace(/\s/g, ""))), GUID),
       "Disabling the plugin did not restore the field handler.");
+      progress("uninstall");
       await run((guid) => AscDesktopEditor.PluginUninstall(guid, false), GUID);
       await until(() => run((guid) => !JSON.parse(AscDesktopEditor.GetInstallPlugins()).some((g) => (g.pluginsData || []).some((p) => p.guid === guid)) &&
         !PDFE.getController("Common.Controllers.Plugins").backgroundPlugins.some((p) => p.get("guid") === guid) &&
@@ -131,6 +138,8 @@ async function smoke(port, packagePath, version) {
       installed = false;
     }
     console.log(`PASS: ONLYOFFICE installation, background listing, native preflight, uninstall and reinstall (${version}). No card accessed.`);
+  } catch (error) {
+    throw new Error(`${stage}: ${error.message}`, { cause: error });
   } finally {
     if (installed && context) await run((guid) => {
       Asc.editor.asc_pluginStop(guid);

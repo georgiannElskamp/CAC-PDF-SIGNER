@@ -2,7 +2,7 @@
 
 Sign existing PDF signature fields with a Common Access Card in ONLYOFFICE Desktop Editors. The background plugin fills the signature block with certificate details, scales the text to fit, and opens Save As.
 
-**[Download 0.7.0-rc.5](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/releases/tag/v0.7.0-rc.5)** · [Installation](docs/INSTALLATION.md) · [Validation status](docs/TESTING.md)
+**[Download 0.7.0-rc.6](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/releases/tag/v0.7.0-rc.6)** · [Installation](docs/INSTALLATION.md) · [Validation status](docs/TESTING.md)
 
 This is a release candidate. Installation and startup have been tested on Windows and Linux; signing with this candidate still needs real CAC validation on the second Windows desktop and a Linux desktop.
 

@@ -16,13 +16,14 @@ class EditorCleanupTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="cac-editor-cleanup-") as directory:
             root = Path(directory)
             binary = root / "helper.exe"
-            shutil.copyfile(Path(os.environ["SystemRoot"]) / "System32/ping.exe", binary)
+            system = Path(os.environ["SystemRoot"]) / "System32"
+            shutil.copyfile(system / "cmd.exe", binary)
             alias = ctypes.create_unicode_buffer(32768)
             length = ctypes.windll.kernel32.GetShortPathNameW(str(binary), alias, len(alias))
             self.assertTrue(0 < length < len(alias))
             log = root / "editor.log"
             with log.open("wb") as stream:
-                child = subprocess.Popen([alias.value, "-t", "127.0.0.1"], stdout=stream,
+                child = subprocess.Popen([alias.value, "/d", "/c", str(system / "ping.exe"), "-t", "127.0.0.1"], stdout=stream,
                                          stderr=stream, creationflags=subprocess.CREATE_NO_WINDOW)
             try:
                 self.assertIsNone(child.poll())
@@ -33,5 +34,5 @@ class EditorCleanupTests(unittest.TestCase):
                 log.unlink()
             finally:
                 if child.poll() is None:
-                    child.kill()
+                    subprocess.run(["taskkill", "/F", "/T", "/PID", str(child.pid)], capture_output=True)
                 child.wait(timeout=10)

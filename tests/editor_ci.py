@@ -15,16 +15,19 @@ import urllib.request
 
 
 def stop_windows_editor(directory):
+    import _winapi
+
     # The launcher can exit before its editor and helper processes.
     root = Path(directory).resolve(strict=True)
     powershell = ["powershell", "-NoProfile", "-NonInteractive", "-Command"]
     inventory = subprocess.run(powershell + [
         "[Console]::OutputEncoding=[Text.UTF8Encoding]::new(); "
         "ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process | "
-        "Select-Object ProcessId,ExecutablePath)"
+        "Select-Object ProcessId,ParentProcessId,ExecutablePath)"
     ], check=True, timeout=30, capture_output=True, encoding="utf-8")
-    identifiers = []
-    for process in json.loads(inventory.stdout):
+    processes = json.loads(inventory.stdout)
+    identifiers = set()
+    for process in processes:
         path = process.get("ExecutablePath")
         if not path:
             continue
@@ -33,13 +36,33 @@ def stop_windows_editor(directory):
         except OSError:
             continue
         if root in executable.parents:
-            identifiers.append(str(int(process["ProcessId"])))
-    if identifiers:
-        subprocess.run(powershell + [
-            "Get-Process -Id " + ",".join(identifiers) + " -ErrorAction SilentlyContinue | "
-            "ForEach-Object { $_ | Stop-Process -Force -ErrorAction SilentlyContinue; "
-            "$_ | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue }"
-        ], check=True, timeout=45)
+            identifiers.add(int(process["ProcessId"]))
+    while True:
+        descendants = {int(p["ProcessId"]) for p in processes if p["ParentProcessId"] in identifiers}
+        if descendants.issubset(identifiers):
+            break
+        identifiers.update(descendants)
+    handles = []
+    try:
+        for identifier in identifiers:
+            try:
+                handles.append(_winapi.OpenProcess(0x100001, False, identifier))  # SYNCHRONIZE | PROCESS_TERMINATE
+            except OSError as error:
+                if error.winerror != 87:  # Process already exited.
+                    raise
+        for handle in handles:
+            if _winapi.WaitForSingleObject(handle, 0) != _winapi.WAIT_OBJECT_0:
+                try:
+                    _winapi.TerminateProcess(handle, 1)
+                except OSError:
+                    if _winapi.WaitForSingleObject(handle, 0) != _winapi.WAIT_OBJECT_0:
+                        raise
+        for handle in handles:
+            if _winapi.WaitForSingleObject(handle, 15000) != _winapi.WAIT_OBJECT_0:
+                raise TimeoutError("An editor test process did not stop.")
+    finally:
+        for handle in handles:
+            _winapi.CloseHandle(handle)
 
 
 def check(package):
