@@ -17,7 +17,7 @@ jobs:
     with:
       release_tag: ${{ inputs.tag }}
   publish:
-    needs: [checks, packaged-runtime, editor-installation]
+    needs: [checks, packaged-runtime, editor-installation, simulated-signing]
     environment: release
     runs-on: ubuntu-latest
     permissions:
@@ -80,6 +80,42 @@ jobs:
         run: gh release download "$RELEASE_TAG" --pattern CAC-PDF-Signer.plugin --dir release
       - name: Run the uploaded native runtime
         run: python -B tools/verify_package.py release/CAC-PDF-Signer.plugin
+  simulated-signing:
+    needs: packaged-runtime
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    permissions:
+      contents: write # Downloading draft assets requires push access.
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+      - name: Prepare draft signing test
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          gh release download "$RELEASE_TAG" --pattern CAC-PDF-Signer.plugin --dir "$RUNNER_TEMP/input"
+          cp tests/editor-installers.json "$RUNNER_TEMP/input/editor.json"
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          (Path(os.environ['RUNNER_TEMP']) / 'input/metadata.json').write_text(json.dumps({'plugin': {'tag': os.environ['RELEASE_TAG']}}))
+          PY
+      - name: Check signature, appearance and Save As recovery
+        run: bash tests/linux/run-container.sh "$RUNNER_TEMP/input" "$RUNNER_TEMP/report"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: release-signing-report
+          path: |
+            ${{ runner.temp }}/report/signing-result.json
+            ${{ runner.temp }}/report/signed-preview.png
+            ${{ runner.temp }}/report/field-screen.png
+          retention-days: 14
+          if-no-files-found: error
   editor-installation:
     needs: packaged-runtime
     timeout-minutes: 20

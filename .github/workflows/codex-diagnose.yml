@@ -1,0 +1,93 @@
+name: Diagnose compatibility failure
+on:
+  workflow_dispatch:
+    inputs:
+      failure_run:
+        description: Completed failed ONLYOFFICE compatibility run ID
+        required: true
+        type: string
+permissions:
+  contents: read
+concurrency:
+  group: codex-diagnosis
+  cancel-in-progress: false
+jobs:
+  evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Require explicit API setup
+        env:
+          ENABLED: ${{ vars.CODEX_ENABLED }}
+          KEY_PRESENT: ${{ secrets.OPENAI_API_KEY != '' }}
+          REF: ${{ github.ref }}
+        run: |
+          test "$REF" = refs/heads/main
+          if [[ "$ENABLED" != true || "$KEY_PRESENT" != true ]]; then
+            echo 'Configure OPENAI_API_KEY and an API usage budget, then set CODEX_ENABLED=true.'
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate the failed run and collect evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          FAILURE_RUN: ${{ inputs.failure_run }}
+        run: python3 -B tools/diagnosis.py "$FAILURE_RUN" "$RUNNER_TEMP/evidence"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: diagnosis-evidence
+          path: ${{ runner.temp }}/evidence
+          retention-days: 14
+          if-no-files-found: error
+  diagnose:
+    needs: evidence
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    outputs:
+      report: ${{ steps.codex.outputs.final-message }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: diagnosis-evidence
+          path: evidence
+      - uses: openai/codex-action@86365089eb2b84e0a8fb0717b304f8bdcb13b20e # v1
+        id: codex
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-version: '0.155.1'
+          permission-profile: ':read-only'
+          safety-strategy: drop-sudo
+          prompt-file: .github/prompts/diagnose.md
+  report:
+    needs: diagnose
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions: {}
+    steps:
+      - name: Save diagnosis
+        env:
+          REPORT: ${{ needs.diagnose.outputs.report }}
+        run: |
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+          report = os.environ['REPORT']
+          if not report.strip():
+              raise SystemExit('No diagnosis was returned')
+          Path('diagnosis.md').write_text(report, encoding='utf-8')
+          Path(os.environ['GITHUB_STEP_SUMMARY']).write_text(report, encoding='utf-8')
+          PY
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: diagnosis-report
+          path: diagnosis.md
+          retention-days: 14
+          if-no-files-found: error

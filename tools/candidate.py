@@ -35,7 +35,7 @@ def finish(directory):
     installation = (f"CAC PDF Signer {version}\n\n"
                     "Install CAC-PDF-Signer.plugin through ONLYOFFICE Plugin Manager, then enable it under Background plugins.\n"
                     "See the corresponding source documentation for platform requirements and validation limits.\n"
-                    "This Actions artifact is a candidate. The published release remains the approved download.\n")
+                    "Check the release page for approval status and compatibility evidence.\n")
     release = ROOT / "release"
     release.mkdir(exist_ok=True)
     for name in ("CAC-PDF-Signer.plugin", "SHA256SUMS.txt"):

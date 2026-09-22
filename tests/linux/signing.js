@@ -72,6 +72,18 @@ async function main() {
     await run(guid=>{if(!Asc.editor.getUsedBackgroundPlugins().includes(guid))Asc.editor.asc_pluginRun(guid,0,"");},GUID);
     await until(()=>run(()=>Asc.editor.jf.Qd().lC.some(w=>w.type===33&&String(w.Vh).includes("onClick(f.name)"))),"Field handler did not attach");
     await delay(1500);
+    const install = home + "/.local/share/onlyoffice/desktopeditors/sdkjs-plugins/" + GUID.slice(4);
+    const noCardEnvironment = {...process.env, CAC_SIGNATURE_HOME: home + "/no-card-control"};
+    delete noCardEnvironment.CAC_PKCS11_MODULE;
+    delete noCardEnvironment.SOFTHSM2_CONF;
+    const noCard = cp.spawnSync(install + "/native/linux-x86_64/cac-signer", [], {
+      env:noCardEnvironment, encoding:"utf8", timeout:45000,
+      input:JSON.stringify({op:"sign",pdf:fs.readFileSync(source).toString("base64"),field:"InstallationTest"}) + "\n"
+    });
+    assert.equal(noCard.status, 1, "The reader control must reject a machine with no card");
+    const noCardEvents = noCard.stdout.trim().split("\n").map(line => JSON.parse(line));
+    assert.match(noCardEvents.at(-1).error, /No eligible signing certificate/);
+    report.privateReaderWithoutSystemMiddleware = true;
     console.log("Clicking the signature field in the editor");
     const clickField = async () => {
       await run(() => {
@@ -97,7 +109,7 @@ async function main() {
     const pid=workers[0], maps=fs.readFileSync("/proc/"+pid+"/maps","utf8");
     const executable=fs.readlinkSync("/proc/"+pid+"/exe");
     assert(maps.includes("/native/linux-x86_64/_internal/libpython3.11.so.1.0"));
-    assert(maps.includes("libsofthsm2.so"));
+    assert(maps.includes(process.env.CAC_PKCS11_MODULE));
     const uid=/^Uid:\s+(\d+)/m.exec(fs.readFileSync("/proc/"+pid+"/status","utf8"))[1];
     assert.equal(uid,"1000");
     assert(executable.includes("/onlyoffice/desktopeditors/sdkjs-plugins/"));
@@ -143,7 +155,7 @@ async function main() {
     assert(report.pdfsig.includes("Signature is Valid"));
     assert(report.pdfsig.includes("InstallationTest"));
     const text=cp.execFileSync("pdftotext",["-raw",output,"-"],{encoding:"utf8"});
-    for(const expected of ["TEST EXAMPLE","TEST ONLY","0000000000","Date:"]) assert(text.replace(/\\s+/g," ").includes(expected),"Appearance missing "+expected);
+    for(const expected of ["TEST EXAMPLE","TEST ONLY","0000000000","Date:"]) assert(text.replace(/\s+/g," ").includes(expected),"Appearance missing "+expected);
     report.appearanceText=text.trim();
     cp.execFileSync("pdftoppm",["-f","1","-singlefile","-r","110","-png",output,evidence+"/signed-preview"]);
     report.independentSignatureValid=true;
