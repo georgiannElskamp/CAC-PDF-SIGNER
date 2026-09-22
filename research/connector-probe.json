@@ -1,0 +1,10 @@
+{
+  "fixture_id": "CAC-DIAG-20260922-A",
+  "synthetic": true,
+  "check": "installed_plugin_version_matches_expected",
+  "expected_version": "0.0.0",
+  "observed_version": "0.7.0-rc.6",
+  "result": "failed",
+  "approved_release_version": "0.7.0-rc.6",
+  "scope": "Synthetic version assertion only; no installation or signing was attempted."
+}
