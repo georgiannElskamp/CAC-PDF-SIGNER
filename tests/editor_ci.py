@@ -1,7 +1,6 @@
 """Install a pinned editor and test the release in a disposable GitHub runner."""
 
 import argparse
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -11,7 +10,6 @@ import signal
 import subprocess
 import sys
 import tempfile
-import urllib.request
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from automation import download, validate_manifest

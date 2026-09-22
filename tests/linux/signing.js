@@ -34,22 +34,27 @@ async function main() {
   const socket=new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolve,reject)=>{socket.onopen=resolve;socket.onerror=reject;});
   let sequence=0;
-  const pending=new Map(), contexts=new Set();
+  const pending=new Map(), contexts=new Set(), sessionContexts=new Map();
   socket.onmessage=({data})=>{
     const message=JSON.parse(data);
-    if(message.method==="Runtime.executionContextCreated") contexts.add(message.params.context.id);
+    if(message.method==="Runtime.executionContextCreated") {
+      if (message.sessionId) {
+        if (!sessionContexts.has(message.sessionId)) sessionContexts.set(message.sessionId, new Set());
+        sessionContexts.get(message.sessionId).add(message.params.context.id);
+      } else contexts.add(message.params.context.id);
+    }
     if(message.method==="Runtime.executionContextDestroyed") contexts.delete(message.params.executionContextId);
     if(pending.has(message.id)){
       const p=pending.get(message.id);pending.delete(message.id);clearTimeout(p.timer);
       message.error?p.reject(new Error(message.error.message)):p.resolve(message.result);
     }
   };
-  function call(method,params={}) { const id=++sequence;return new Promise((resolve,reject)=>{
+  function call(method,params={},sessionId) { const id=++sequence;return new Promise((resolve,reject)=>{
     const timer=setTimeout(()=>{pending.delete(id);reject(new Error(method+" timed out"));},120000);
-    pending.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params}));
+    pending.set(id,{resolve,reject,timer});socket.send(JSON.stringify({id,method,params,sessionId}));
   });}
-  async function evaluate(contextId,expression) {
-    const reply=await call("Runtime.evaluate",{contextId,expression,awaitPromise:true,returnByValue:true});
+  async function evaluate(contextId,expression,sessionId) {
+    const reply=await call("Runtime.evaluate",{contextId,expression,awaitPromise:true,returnByValue:true},sessionId);
     if(reply.exceptionDetails) throw new Error(reply.exceptionDetails.exception?.description||reply.exceptionDetails.text);
     return reply.result.value;
   }
@@ -142,7 +147,7 @@ async function main() {
     assert.equal(digest(recoveryPath),signedHash);
     report.recoveryWithoutResigning=true;
     console.log("Saving the recovered signature to a spaced Unicode path");
-    key(retry,"ctrl+l");type(retry,output);key(retry,"Return");
+    key(retry,"ctrl+l");await delay(200);key(retry,"ctrl+a");type(retry,output);await delay(200);key(retry,"Return");
     await until(()=>fs.existsSync(output),"Saved PDF missing");
     await until(()=>JSON.parse(fs.readFileSync(recordPath,"utf8")).savedPath===output,"Saved state missing");
     assert.equal(digest(output),signedHash);
@@ -153,16 +158,30 @@ async function main() {
     report.outputHash=signedHash;
     report.pdfsig=cp.execFileSync("pdfsig",["-nocert",output],{encoding:"utf8"});
     assert(report.pdfsig.includes("Signature is Valid"));
+    assert(report.pdfsig.includes("Total document signed"));
     assert(report.pdfsig.includes("InstallationTest"));
     const text=cp.execFileSync("pdftotext",["-raw",output,"-"],{encoding:"utf8"});
     for(const expected of ["TEST EXAMPLE","TEST ONLY","0000000000","Date:"]) assert(text.replace(/\s+/g," ").includes(expected),"Appearance missing "+expected);
     report.appearanceText=text.trim();
     cp.execFileSync("pdftoppm",["-f","1","-singlefile","-r","110","-png",output,evidence+"/signed-preview"]);
     report.independentSignatureValid=true;
-    report.signedFileOpened=await until(async()=>{
+    const reopened=await until(async()=>{
       const pages=await(await fetch("http://127.0.0.1:9251/json/list")).json();
-      return pages.some(p=>p.url.includes("doctype=pdf") && decodeURIComponent(p.url).includes("signed validation"));
+      return pages.find(p=>p.url.includes("doctype=pdf") && decodeURIComponent(p.url).includes("signed validation"));
     },"Signed PDF did not reopen",30000);
+    const attached=await call("Target.attachToTarget",{targetId:reopened.id,flatten:true});
+    await call("Runtime.enable",{},attached.sessionId);
+    report.signedFileOpened=await until(async()=>{
+      for(const id of sessionContexts.get(attached.sessionId) || []) {
+        try {
+          const value=await evaluate(id, `typeof Asc !== 'undefined' && typeof AscDesktopEditor !== 'undefined' &&
+            AscDesktopEditor.LocalFileGetSourcePath() === ${JSON.stringify(output)} &&
+            Asc.editor?.jf?.file?.Mp?.getInteractiveFormsInfo()?.Fields?.some(f => f.name === 'InstallationTest' && !!f.Sig)`, attached.sessionId);
+          if(value) return true;
+        } catch(error) { if(!/context.*(find|destroy)|find.*context/i.test(error.message)) throw error; }
+      }
+      return false;
+    },"Reopened PDF did not load its signed signature field",30000);
     report.passed=true;
     fs.writeFileSync(evidence+"/signing-result.json",JSON.stringify(report,null,2));
     console.log("PASS: native PIN, PKCS11 signing, Save As cancellation/recovery, unchanged source, independent PDF verification and visible certificate text.");
