@@ -31,7 +31,7 @@ jobs:
               "https://api.github.com/repos/georgiannElskamp/CAC-PDF-SIGNER/issues/"
               f"{event['pull_request']['number']}/comments"
           )
-          marker = "CAC-DIAG-BOT-20260922-B"
+          marker = "CAC-DIAG-BOT-20260922-C"
           headers = {
               "Authorization": f"Bearer {os.environ['GH_TOKEN']}",
               "Accept": "application/vnd.github+json",
