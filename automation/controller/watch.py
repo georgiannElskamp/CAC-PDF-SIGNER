@@ -168,6 +168,10 @@ def health():
             problems.append(f"{record['tag']}: dispatch {key[:12]} has no completed result. Inspect before manually retrying.")
     for item in state.get("pendingAssets", []):
         problems.append(item["tag"] + ": " + item["reason"])
+    if state.get("lastComponentDispatch"):
+        runs = api(f"/repos/{PUBLIC}/actions/workflows/component-watch.yml/runs?per_page=1", anonymous=True)["workflow_runs"]
+        if not runs or stale(runs[0]["created_at"], 192) or (runs[0]["status"] == "completed" and runs[0]["conclusion"] != "success"):
+            problems.append("The weekly component watch is missing, stale or unsuccessful.")
     title = "Scheduler health"
     issues = api(f"/repos/{PRIVATE}/issues?state=all&per_page=100")
     issue = next((item for item in issues if item["title"] == title and not item.get("pull_request")

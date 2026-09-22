@@ -78,3 +78,5 @@ The operating system supplies glibc and GTK 3. The Linux worker contains no Wind
 ## Installation tests
 
 Release checks download official ONLYOFFICE installers pinned in `tests/editor-installers.json` and install them only on disposable CI runners. The editor installers are not included in this plugin. Build and verification commands live in `tools/`; see [BUILDING.md](docs/BUILDING.md).
+
+The hosted Linux signing test builds SoftHSM 2.6.1 with Debian 12 patches as a disposable PKCS#11 simulator. Its source checksums are pinned in `tests/linux/Dockerfile`. SoftHSM uses the BSD 2-Clause license; its source and notices are available in the [Debian source package](https://sources.debian.org/src/softhsm2/2.6.1-2.1/). SoftHSM, test keys, editor installers and container images are not bundled with the plugin. Only the test harness source accompanies the corresponding-source archive.
