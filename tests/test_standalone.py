@@ -68,7 +68,7 @@ class StandaloneRecoveryTests(unittest.TestCase):
             result = restarted.run(self.request)
         self.assertTrue(result["saved"])
         self.assertTrue(result["integrityVerified"])
-        self.assertEqual(result["path"], str(target))
+        self.assertEqual(result["path"], str(target.resolve()))
         self.assertEqual(target.read_bytes(), self.content)
         self.assertIsNone(restarted.pending(self.metadata["sourceHash"], "PreparedBy"))
 
