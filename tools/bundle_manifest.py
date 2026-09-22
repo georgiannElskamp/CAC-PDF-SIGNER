@@ -9,7 +9,7 @@ from runtime_config import VERSION
 
 def source_hashes(root):
     files = list(root.glob("*.py"))
-    files += [root / name for name in ("requirements-lock.txt", "requirements-linux.txt")]
+    files += [root / name for name in ("requirements-lock.txt", "requirements-linux.txt", "requirements-build.txt")]
     files += [p for p in (root / "fonts").rglob("*") if p.is_file()]
     result = {}
     for path in sorted(files):

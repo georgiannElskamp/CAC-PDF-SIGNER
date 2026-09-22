@@ -35,7 +35,7 @@ jobs:
           EDITOR_TAG: ${{ inputs.editor_tag }}
           EXPECTED: ${{ inputs.request_id }}
         run: python3 -B tools/automation.py prepare --tag "$EDITOR_TAG" --expected "$EXPECTED" --output "$RUNNER_TEMP/input"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: compatibility-input
           path: ${{ runner.temp }}/input
@@ -52,7 +52,7 @@ jobs:
         with:
           ref: ${{ needs.prepare.outputs.source_commit }}
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: compatibility-input
           path: ${{ runner.temp }}/input
@@ -87,7 +87,7 @@ jobs:
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '22'
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: compatibility-input
           path: ${{ runner.temp }}/input
@@ -120,7 +120,7 @@ jobs:
           TEST_STEPS: ${{ toJSON(steps) }}
           PLATFORM: ${{ matrix.os }}
         run: python -B tools/automation.py result "$RUNNER_TEMP/report" "$PLATFORM"
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: compatibility-${{ matrix.os }}
@@ -138,7 +138,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: compatibility-input
           path: ${{ runner.temp }}/input
@@ -160,7 +160,7 @@ jobs:
         env:
           TEST_STEPS: ${{ toJSON(steps) }}
         run: python3 -B tools/automation.py result "$RUNNER_TEMP/report" simulation
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
           name: compatibility-simulation
@@ -181,7 +181,7 @@ jobs:
           for path in (Path(os.environ['RUNNER_TEMP']) / 'control-report').glob('*'):
               path.rename(path.with_name('baseline-' + path.name))
           PY
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always() && steps.baseline.outcome != 'skipped'
         with:
           name: compatibility-simulation-control
@@ -203,7 +203,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: compatibility-*
           merge-multiple: true
@@ -230,7 +230,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: compatibility-input
           path: ${{ runner.temp }}/input

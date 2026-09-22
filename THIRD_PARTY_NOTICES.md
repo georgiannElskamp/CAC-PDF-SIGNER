@@ -41,9 +41,9 @@ The bridge contains the Go 1.26.4 runtime and `golang.org/x/sys` v0.46.0, copyri
 
 `requirements-lock.txt` pins the production dependencies, including pyHanko, cryptography, asn1crypto, pyhanko-certvalidator and Pillow. ReportLab is used for tests. Dependency licenses are included in release archives under `licenses/dependencies`.
 
-PyInstaller 6.19.0 packages CPython 3.11.9 and the dependencies. The archive includes PyInstaller's GPL license and bootloader exception, the CPython license, and setuptools notices. Integration source is included under `source/`.
+PyInstaller 6.22.3 packages CPython 3.11.9 and the dependencies. The archive includes PyInstaller's GPL license and bootloader exception, the CPython license, and setuptools notices. Integration source is included under `source/`.
 
-- PyInstaller source: https://github.com/pyinstaller/pyinstaller/tree/v6.19.0
+- PyInstaller source: https://github.com/pyinstaller/pyinstaller/tree/v6.22.3
 - CPython source: https://github.com/python/cpython/tree/v3.11.9
 - Python packages: https://pypi.org/
 
