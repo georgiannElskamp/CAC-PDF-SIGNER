@@ -9,6 +9,7 @@ All scheduled work runs on GitHub-hosted runners. No desktop automation, WSL ins
 | ONLYOFFICE compatibility | Scheduler or manual | Tests the approved plugin, updates one issue per editor release and proposes a draft editor-pin PR when appropriate |
 | Checks | Push, PR or manual | Python and JavaScript regression tests on Windows and Linux |
 | Dependency review | PR | Rejects newly introduced high/critical dependency vulnerabilities |
+| Runtime change validation | PR | Requires a full candidate build and GUI checks when shipped code, runtime dependencies or build inputs change |
 | Bundled component watch | Weekly scheduler dispatch or manual | Reports custom native version changes, recent upstream advisory feeds and a component inventory |
 | Build candidate | Manual | Builds both workers, packages one plugin and validates installation and simulated signing |
 | Prepare release draft | Manual, successful candidate run ID | Stages the exact tested bytes under a new version and starts release checks |
