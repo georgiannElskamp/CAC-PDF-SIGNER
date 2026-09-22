@@ -17,7 +17,7 @@ function harness(name) {
       timers.set(++sequence, fn);
     },
     crypto: { randomUUID: () => "request-id" },
-    location: { href: "file:///C:/Apps/plugin/background.html" },
+    location: { href: "file:///C:/Apps/plugin/standalone.html" },
     setTimeout(fn) {
       timers.set(++sequence, fn);
       return sequence;

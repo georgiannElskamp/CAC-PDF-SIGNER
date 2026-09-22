@@ -1,12 +1,12 @@
 {
   "name": "CAC PDF Signer",
   "guid": "asc.{9A58C737-A6B4-4E31-8D3F-2C940B716EF9}",
-  "version": "0.4.1",
+  "version": "0.5.3",
   "minVersion": "9.4.0",
   "variations": [
     {
       "description": "Click a PDF signature box, enter your CAC PIN in Windows, then save the signed copy.",
-      "url": "background.html",
+      "url": "standalone.html",
       "icons": ["icon.png", "icon@2x.png"],
       "EditorsSupport": ["pdf"],
       "isViewer": true,

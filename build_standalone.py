@@ -11,7 +11,7 @@ import sys
 import zipfile
 from pathlib import Path
 
-from audit_public import audit
+from audit_public import audit, source_files
 from runtime_config import outside_checkout
 from standalone_worker import VERSION
 
@@ -147,7 +147,7 @@ def build(destination, bridge, reuse_executable=False):
         raise ValueError("Build with 64-bit Python on Windows.")
     destination = outside_checkout(destination)
     destination.mkdir(parents=True, exist_ok=True)
-    count, findings = audit(ROOT)
+    count, findings = audit(ROOT, include_release=False)
     if findings:
         raise ValueError(f"Source publication audit failed: {findings}")
     if hashlib.sha256(bridge.read_bytes()).hexdigest() != BRIDGE_SHA256:
@@ -205,8 +205,8 @@ def build(destination, bridge, reuse_executable=False):
             "Bundled dependency self-check failed: " + check.stdout + check.stderr
         )
     config = json.loads((ROOT / "plugin/config.json").read_text())
-    config["version"] = VERSION
-    config["variations"][0]["url"] = "standalone.html"
+    if config["version"] != VERSION or config["variations"][0]["url"] != "standalone.html":
+        raise ValueError("Plugin manifest does not match the standalone worker.")
     if config["variations"][0]["type"] != "background":
         raise ValueError("The standalone plugin must be a background plugin.")
     target = destination / "CAC-PDF-Signer.plugin"
@@ -220,9 +220,8 @@ def build(destination, bridge, reuse_executable=False):
         for name in ASSETS:
             archive.write(ROOT / "plugin" / name, name)
         archive.write(executable, "native/cac-signer.exe")
-        for path in sorted(ROOT.rglob("*")):
-            if path.is_file() and ".git" not in path.relative_to(ROOT).parts:
-                archive.write(path, "source/" + path.relative_to(ROOT).as_posix())
+        for path in source_files(ROOT):
+            archive.write(path, "source/" + path.relative_to(ROOT).as_posix())
         for name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
             archive.write(ROOT / name, name)
         for name, content in notices.items():

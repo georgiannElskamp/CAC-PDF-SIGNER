@@ -108,7 +108,7 @@ def sign_bytes(pdf, signer, appearance=None):
     writer = IncrementalPdfFileWriter(original, strict=True)
     if writer.prev.encrypted:
         raise ValueError(
-            "Password-protected PDFs are not supported in this test version."
+            "Password-protected PDFs are not supported."
         )
     field_name, field_spec, existing_only, style, params = signing_appearance(
         writer.prev, signer.signing_cert, appearance

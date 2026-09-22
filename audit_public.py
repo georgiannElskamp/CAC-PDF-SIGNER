@@ -1,9 +1,12 @@
 """Check source files before packaging."""
 
 import argparse
+import hashlib
+import json
 import re
 import struct
 import sys
+import zipfile
 from pathlib import Path
 
 FORBIDDEN_SUFFIXES = {
@@ -74,13 +77,82 @@ def png_has_only_image_chunks(data):
     return False
 
 
-def audit(root):
+def source_files(root):
+    return [
+        path for path in sorted(root.rglob("*"))
+        if path.is_file()
+        and ".git" not in path.relative_to(root).parts
+        and path.relative_to(root).parts[0] != "release"
+    ]
+
+
+def audit_release(root):
+    directory = root / "release"
+    if not directory.exists():
+        return []
+    try:
+        expected = {"CAC-PDF-Signer.plugin", "SHA256SUMS.txt", "INSTALL.txt"}
+        if {p.name for p in directory.iterdir()} != expected:
+            raise ValueError("Release must contain one plugin, its checksum, and INSTALL.txt.")
+        if directory.is_symlink() or any(p.is_symlink() for p in directory.iterdir()):
+            raise ValueError("Release files must not be symbolic links.")
+        package = directory / "CAC-PDF-Signer.plugin"
+        digest = hashlib.sha256(package.read_bytes()).hexdigest()
+        if (directory / "SHA256SUMS.txt").read_text().strip() != digest + "  " + package.name:
+            raise ValueError("Release checksum does not match the plugin.")
+        files = {p.relative_to(root).as_posix(): p for p in source_files(root)}
+        with zipfile.ZipFile(package) as archive:
+            names = archive.namelist()
+            if len(names) != len(set(names)) or archive.testzip():
+                raise ValueError("Duplicate or corrupt archive entries.")
+            if any("\\" in n or ":" in n or n.startswith("/") or ".." in n.split("/") for n in names):
+                raise ValueError("Unsafe archive path.")
+            bundled = {n[7:] for n in names if n.startswith("source/")}
+            if bundled != set(files):
+                raise ValueError("Bundled source inventory differs from the repository.")
+            for name, path in files.items():
+                if archive.read("source/" + name) != path.read_bytes():
+                    raise ValueError(f"Bundled source is stale: {name}")
+            config = json.loads((root / "plugin/config.json").read_text())
+            if json.loads(archive.read("config.json")) != config:
+                raise ValueError("Release manifest differs from the repository.")
+            if config["version"] not in (directory / "INSTALL.txt").read_text():
+                raise ValueError("Installation notes have a different version.")
+            assets = {"desktop-adapter.js", "plugins.js", "icon.png", "icon@2x.png",
+                      "native-client.js", "native-host.js", "native.html",
+                      "standalone-background.js", "standalone.html"}
+            for name in assets:
+                if archive.read(name) != (root / "plugin" / name).read_bytes():
+                    raise ValueError(f"Bundled plugin asset is stale: {name}")
+            for name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
+                if archive.read(name) != (root / name).read_bytes():
+                    raise ValueError(f"Bundled notice is stale: {name}")
+            for path in (root / "licenses").rglob("*"):
+                if path.is_file() and archive.read(path.relative_to(root).as_posix()) != path.read_bytes():
+                    raise ValueError("Bundled native dependency notices differ.")
+            allowed = assets | {"config.json", "bundle.js", "native/cac-signer.exe",
+                                "LICENSE", "THIRD_PARTY_NOTICES.md"}
+            if not allowed.issubset(names):
+                raise ValueError("Release archive is missing required files.")
+            bundle = "window.CAC_BUNDLE = " + json.dumps({"version": config["version"]}) + ";\n"
+            if archive.read("bundle.js").decode() != bundle:
+                raise ValueError("Bundled worker version differs from the manifest.")
+            if any(n not in allowed and not n.startswith(("source/", "licenses/")) for n in names):
+                raise ValueError("Unexpected file in the release archive.")
+    except (OSError, ValueError, KeyError, zipfile.BadZipFile) as error:
+        return [("release", str(error))]
+    return []
+
+
+def audit(root, include_release=True):
     problems = []
     count = 0
     for path in sorted(root.rglob("*")):
         rel = path.relative_to(root)
         if ".git" in rel.parts:
             continue  # This checks the working tree, not historical Git objects.
+        if rel.parts[0] == "release":
+            continue
         if path.is_symlink():
             problems.append((str(rel), "symbolic link requires separate review"))
             continue
@@ -114,6 +186,8 @@ def audit(root):
         for category, pattern in PATTERNS.items():
             if pattern.search(data):
                 problems.append((str(rel), category))
+    if include_release:
+        problems.extend(audit_release(root))
     return count, problems
 
 

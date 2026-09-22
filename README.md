@@ -2,6 +2,8 @@
 
 Sign PDF signature fields with a Common Access Card in ONLYOFFICE Desktop Editors. The plugin runs in the background and includes its own signing runtime.
 
+Version 0.5.3 is a public preview for the supported editor build below. Testing on a clean second computer and a fresh hardware-CAC signing test are still outstanding.
+
 ## Requirements
 
 - Windows 10 or later, x64, and ONLYOFFICE Desktop Editors 9.4.0.129.
@@ -9,6 +11,8 @@ Sign PDF signature fields with a Common Access Card in ONLYOFFICE Desktop Editor
 - A plugin installation path without spaces. PDF filenames and save locations may contain spaces.
 
 ## Install
+
+Download `CAC-PDF-Signer.plugin` from the project's GitHub Releases, or use the copy in `release/` supplied with this folder. Python and a separate signing service are not required.
 
 1. Open **Plugins > Plugin Manager > Available plugins > Install plugin manually**.
 2. Select **CAC-PDF-Signer.plugin**.
@@ -35,7 +39,7 @@ If you cancel Save As, click the same field again to save the completed signatur
 
 ## Build and test
 
-See [build instructions and architecture](docs/STANDALONE_ARCHITECTURE.md). Use `build_standalone.py` to create the installable `.plugin` file.
+See [build instructions and architecture](docs/STANDALONE_ARCHITECTURE.md). Use `build_standalone.py` to create the installable `.plugin` file. The `release/` directory is excluded from Git; publish its plugin and checksum as GitHub Release assets.
 
 For development, install `requirements-dev.txt` in a virtual environment outside the checkout, then run:
 
@@ -47,5 +51,7 @@ python -B audit_public.py
 ```
 
 ## License
+
+See [related signing projects](docs/ALTERNATIVES.md) for alternatives and differences in deployment.
 
 The project code is AGPL-3.0-only. Bundled dependencies retain their own licenses, including the Microsoft runtime redistribution conditions. See [LICENSE](LICENSE), [third-party notices](THIRD_PARTY_NOTICES.md), [security](SECURITY.md), and [release checks](docs/RELEASE_CHECKS.md).

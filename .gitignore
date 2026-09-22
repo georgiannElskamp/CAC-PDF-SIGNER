@@ -1,4 +1,5 @@
-# Installation state and generated packages must never be published.
+# Local state and build output.
+release/
 settings.json
 connection.js
 *.plugin

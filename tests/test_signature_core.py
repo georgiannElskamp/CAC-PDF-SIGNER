@@ -5,7 +5,7 @@ import datetime
 import io
 import unittest
 
-import helper
+import signing
 from asn1crypto import keys
 from asn1crypto import x509 as asn1_x509
 from card_selection import choose_certificate
@@ -86,7 +86,7 @@ class SignatureTests(unittest.TestCase):
         )
 
     def test_signature_preserves_bytes_and_fills_existing_field(self):
-        signed = helper.sign_bytes(self.pdf, self.signer, {"field": "First"})
+        signed = signing.sign_bytes(self.pdf, self.signer, {"field": "First"})
         reader = PdfFileReader(io.BytesIO(signed))
         (signature,) = reader.embedded_signatures
         status = validate_pdf_signature(
@@ -103,7 +103,7 @@ class SignatureTests(unittest.TestCase):
         self.assertIn(b"(ALEX)", appearance)
         self.assertIn(b"(EXAMPLE)", appearance)
         with self.assertRaises(ValueError):
-            helper.sign_bytes(signed, self.signer, {"field": "First"})
+            signing.sign_bytes(signed, self.signer, {"field": "First"})
 
     def test_rank_is_not_invented(self):
         details = certificate_details(self.cert)

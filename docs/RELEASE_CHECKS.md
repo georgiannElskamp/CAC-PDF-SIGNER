@@ -19,8 +19,8 @@ The tests cover signature integrity, field selection, text sizing and page rotat
 - Check wide, narrow, shallow and rotated fields for clipping.
 - Cancel Save As, then retry and confirm that another card signature is not requested.
 
-## Version 0.5.2
+## Version 0.5.3
 
-The 26 Python tests and both JavaScript suites pass. The standalone package passes dependency, license-checksum and DLL-inventory checks. Missing or altered native dependency notices stop the build. Windows system runtime DLLs are excluded; the Python-supplied Visual C++ runtime is retained with its redistribution conditions.
+The 19 Python tests and both JavaScript suites pass. The obsolete service implementation and its tests have been removed. Standalone recovery, PDF signing, field selection, text layout and native messaging remain covered. Release checks verify notices, checksums, manifest versions and matching packaged source; the builder checks the native DLL inventory.
 
-Installation, native launch/exit, Save As and reopening were tested on ONLYOFFICE 9.4.0.129 with the 0.5.0 package. Version 0.5.1 added signature-layout tests and rendered samples. Hardware-CAC and editor acceptance testing remain outstanding for 0.5.2.
+Installation, native launch/exit, Save As and reopening were tested on ONLYOFFICE 9.4.0.129 with the 0.5.0 package. Version 0.5.1 added signature-layout tests and rendered samples. A clean second-computer test and fresh hardware-CAC/editor acceptance testing remain outstanding for 0.5.3.

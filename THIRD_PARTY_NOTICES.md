@@ -20,7 +20,7 @@ The standalone package includes the Windows CNG executable from `192d-Wing/pdf-s
 - Archive SHA-256: `c65fde8bed039378f13ef663781bee2498e4418cb2361a4e94759e39ef5b4910`
 - Executable SHA-256: `0c641a9a326498e90d9d5f887bfe694d389b8e7ee74857b551c240382431b067`
 
-The builders verify these checksums before packaging.
+The builder verifies the executable checksum before packaging.
 
 The bridge contains the Go 1.26.4 runtime and `golang.org/x/sys` v0.46.0, copyright The Go Authors, under BSD-3-Clause. Their notices are in `licenses/go-BSD-3-Clause.txt` and `licenses/go-x-sys-BSD-3-Clause.txt`.
 

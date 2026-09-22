@@ -6,6 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 import build_standalone
+from audit_public import audit_release, source_files
 
 
 class ReleaseLicenseTests(unittest.TestCase):
@@ -46,3 +47,20 @@ class ReleaseLicenseTests(unittest.TestCase):
         self.assertNotIn("PYTHONPATH", env)
         self.assertNotIn("PYTHONHOME", env)
         self.assertIn(str(Path(os.environ["SystemRoot"]) / "System32"), env["PATH"])
+
+    def test_existing_release_is_not_embedded_in_source(self):
+        release = self.root / "release"
+        release.mkdir()
+        (release / "CAC-PDF-Signer.plugin").write_bytes(b"old package")
+        self.assertTrue(source_files(self.root))
+        self.assertFalse(any(release in p.parents for p in source_files(self.root)))
+
+    def test_release_checksum_failure_is_reported(self):
+        release = self.root / "release"
+        release.mkdir()
+        (release / "CAC-PDF-Signer.plugin").write_bytes(b"changed package")
+        (release / "SHA256SUMS.txt").write_text("wrong checksum")
+        (release / "INSTALL.txt").write_text("installation notes")
+        findings = audit_release(self.root)
+        self.assertEqual(len(findings), 1)
+        self.assertIn("checksum", findings[0][1])

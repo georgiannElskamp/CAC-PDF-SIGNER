@@ -39,6 +39,6 @@ Build output must be outside the checkout. `--reuse-executable` repackages asset
 
 The build uses only Python and Windows directories for native-library lookup. Windows supplies the Universal CRT and API-set libraries. Changing Python, either OpenSSL version, or the native DLL inventory requires reviewing and updating the accompanying notices.
 
-## Legacy tools
+## Distribution
 
-`setup_windows.py`, `build_plugin.py`, `helper.py`, and `plugin/background.js` implement the 0.4.x helper-based edition. They are retained for regression tests. Current releases use `build_standalone.py`, `standalone.html`, and `standalone-background.js`.
+Keep the current plugin, `SHA256SUMS.txt`, and `INSTALL.txt` in `release/`. That directory is excluded from source packaging and Git. Attach the plugin and checksum to a GitHub Release when publishing. The plugin contains the corresponding project source and dependency licenses.

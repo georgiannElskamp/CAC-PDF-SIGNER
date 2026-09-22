@@ -14,4 +14,4 @@ Use a sample PDF and redact paths and identity details from error reports. Repor
 
 ## Release checks
 
-Run `python -B audit_public.py` before packaging. It checks working-tree files; Git history and compiled archives require separate inspection. Legacy 0.4.x packages include an installation token and are not suitable for redistribution.
+Run `python -B audit_public.py` before publishing. It checks source files and, when present, the release checksum and packaged source. Git history and compiled archives require separate inspection.
