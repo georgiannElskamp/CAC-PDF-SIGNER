@@ -1,7 +1,7 @@
 name: Connector diagnosis probe
 on:
   pull_request:
-    types: [reopened]
+    types: [reopened, synchronize]
 permissions: {}
 jobs:
   request-diagnosis:
