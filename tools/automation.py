@@ -138,9 +138,11 @@ def prepare(tag, output, expected=""):
         stream.write(f"editor_tag=v{manifest['version']}\nplugin_version={approved['tag'][1:]}\nsource_commit={approved['commit']}\n")
 
 
-def upsert_issue(marker, title, body):
+def upsert_issue(marker, title, body, *, state):
     if not re.fullmatch(r"[a-z0-9:.-]+", marker):
         raise ValueError("Invalid issue marker")
+    if state not in ("open", "closed"):
+        raise ValueError("Invalid issue state")
     footer = f"<!-- cac-automation:{marker} -->"
     existing = None
     page = 1
@@ -152,11 +154,13 @@ def upsert_issue(marker, title, body):
             break
         page += 1
     content = {"title": title, "body": body.rstrip() + "\n\n" + footer}
-    if existing:
-        if existing["body"] != content["body"] or existing["title"] != title:
-            return api(f"/repos/{REPOSITORY}/issues/{existing['number']}", method="PATCH", body=content)
-        return existing
-    return api(f"/repos/{REPOSITORY}/issues", method="POST", body=content)
+    if not existing:
+        existing = api(f"/repos/{REPOSITORY}/issues", method="POST", body=content)
+    if any(existing.get(key) != value for key, value in {**content, "state": state}.items()):
+        return api(f"/repos/{REPOSITORY}/issues/{existing['number']}", method="PATCH",
+                   body={**content, "state": state,
+                         "state_reason": "completed" if state == "closed" else "reopened"})
+    return existing
 
 
 def report(directory):
@@ -165,13 +169,27 @@ def report(directory):
     results = sorted(directory.glob("result-*.json"))
     expected = {"windows-2025", "ubuntu-24.04", "simulation"}
     rows, seen = [], set()
-    prerequisites = json.loads(os.environ.get("PREREQUISITES", "{}"))
-    successful = all(value == "success" for value in prerequisites.values())
+    try:
+        prerequisites = json.loads(os.environ.get("PREREQUISITES", "{}"))
+    except ValueError:
+        prerequisites = None
+    required_jobs = {"source", "package", "desktop", "simulation"}
+    successful = (isinstance(prerequisites, dict) and required_jobs <= prerequisites.keys()
+                  and all(value == "success" for value in prerequisites.values()))
     for path in results:
-        item = json.loads(path.read_text())
-        name = item["platform"]
+        try:
+            item = json.loads(path.read_text())
+            name = item["platform"]
+            if not isinstance(name, str):
+                raise ValueError("Invalid platform")
+        except (OSError, ValueError, TypeError, KeyError):
+            successful = False
+            rows.append("| Invalid result | Failed / incomplete | Unknown |")
+            continue
         if name not in expected or name in seen:
-            raise ValueError("Unexpected or duplicate result")
+            successful = False
+            rows.append("| Unexpected or duplicate result | Failed / incomplete | Unknown |")
+            continue
         seen.add(name)
         passed = item.get("passed") is True
         successful &= passed
@@ -188,9 +206,10 @@ def report(directory):
             "\n\nWindows covers installation, background startup, preflight, removal and reinstallation. "
             "Linux adds a software-token signing test. These checks do not validate a physical CAC or reader. "
             "A failed test alone does not establish an adapter defect; inspect its stage and baseline control.\n\n"
-            f"Source/package prerequisites: `{json.dumps(prerequisites, sort_keys=True)}`.\n\n"
+            f"Required jobs: `{json.dumps(prerequisites, sort_keys=True)}`.\n\n"
             "The published plugin and approved editor pin are unchanged.")
-    upsert_issue("editor:" + str(manifest["releaseId"]), f"Compatibility: ONLYOFFICE v{manifest['version']}", body)
+    upsert_issue("editor:" + str(manifest["releaseId"]), f"Compatibility: ONLYOFFICE v{manifest['version']}", body,
+                 state="closed" if successful else "open")
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as stream:
         stream.write(body + "\n")
     if not successful:
