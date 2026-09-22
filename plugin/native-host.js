@@ -48,6 +48,7 @@
     let process;
     let startup;
     let responded = false;
+    let completedResult = null;
     let inputSent = false;
     let startupError = "";
     function classifyStartupError(message) {
@@ -95,13 +96,12 @@
           return;
         }
         if (type === 2) {
-          finish({
+          if (active === process) active = null;
+          finish(completedResult || {
             ok: false,
             error:
               startupError || "The signing component stopped before completion. Any signed recovery copy is retained; click the field to retry.",
           });
-          if (active === process) active = null;
-          setTimeout(() => process.end(), 0);
           return;
         }
         if (type !== 0 || responded) return;
@@ -145,9 +145,11 @@
             }
           }
           writeChunk();
-        } else if (response.event === "result") {
+        } else if (response.event === "result" && !completedResult) {
+          completedResult = response;
           try { process.stdin('{"op":"ack"}\n'); } catch (_) { /* Worker timeout also releases it. */ }
-          finish(response);
+          // The editor cleans up exited workers. Deliver after its exit callback
+          // so closing the client cannot race native process cleanup.
         }
       };
       process.start();
