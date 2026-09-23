@@ -1,12 +1,13 @@
-# Release 0.8.0
+# Release 0.8.1
 
-Changes through research commit `83410abc67acc7a6763d504bc35497509eda1de1`.
+Changes through research commit `0ae45e36b8237b8625dac46c9b67bd65bf9c2ae6`.
 
-- Complete research controller setup and permanent-branch guards (#14)
+- Sync accepted release into research (#18)
+- Fix publishing and resuming draft releases (#17)
 
-Release candidate **0.8.0** (minor).
+Release candidate **0.8.1** (patch).
 
-Research snapshot: `83410abc67acc7a6763d504bc35497509eda1de1`.
+Research snapshot: `0ae45e36b8237b8625dac46c9b67bd65bf9c2ae6`.
 
 This PR requires the maintainer's approval and manual merge. Automation will not merge it. The candidate is frozen while review is pending. New research changes wait for the next release.
 

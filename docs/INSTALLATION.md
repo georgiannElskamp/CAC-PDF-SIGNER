@@ -1,6 +1,6 @@
 # Install and sign
 
-Download **CAC-PDF-Signer.plugin** from the [0.7.0-rc.6 release](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/releases/tag/v0.7.0-rc.6). GitHub's source ZIP is for development and cannot be installed as a plugin. The `.plugin` file contains both signing runtimes; it needs no separate Python installation or persistent signing service.
+Download **CAC-PDF-Signer.plugin** from the [latest approved release](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/releases/latest). GitHub's source ZIP is for development and cannot be installed as a plugin. The `.plugin` file contains both signing runtimes; it needs no separate Python installation or persistent signing service.
 
 ## Requirements
 
