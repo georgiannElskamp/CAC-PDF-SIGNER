@@ -13,6 +13,7 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from automation import download, validate_manifest
+from check_form_handoff import verify as verify_form_handoff
 
 
 def stop_windows_editor(directory):
@@ -82,6 +83,8 @@ def check(package, manifest=None, plugin_version=None):
         download(url, installer, pin["sha256"])
         print(f"Editor v{config['version']}; installer SHA-256 {pin['sha256']}; plugin {version}", flush=True)
         environment = dict(os.environ)
+        state = work / "state"
+        environment["CAC_SIGNATURE_HOME"] = str(state)
         if sys.platform == "win32":
             subprocess.run([str(installer), "/VERYSILENT", "/SP-", "/SUPPRESSMSGBOXES", "/NORESTART", "/TASKS="], check=True, timeout=300)
             editor = Path(os.environ["ProgramFiles"]) / "ONLYOFFICE/DesktopEditors/DesktopEditors.exe"
@@ -100,33 +103,48 @@ def check(package, manifest=None, plugin_version=None):
                                XDG_RUNTIME_DIR=str(runtime), QT_QPA_PLATFORM="xcb", GDK_BACKEND="x11")
         pdf = work / "installation-test.pdf"
         subprocess.run(["node", str(root / "tests/editor_smoke.js"), "--fixture", str(pdf)], check=True)
-        with (work / "editor.log").open("wb") as log:
-            options = {"start_new_session": True} if sys.platform == "linux" else {"creationflags": subprocess.CREATE_NO_WINDOW}
-            child = subprocess.Popen([str(editor), "--remote-debugging-port=9251", str(pdf)],
-                                     cwd=editor.parent, env=environment, stdout=log, stderr=log, **options)
-            try:
-                subprocess.run(["node", str(root / "tests/editor_smoke.js"), "--disposable-profile", "9251", str(package.resolve()), version],
-                               check=True, timeout=360)
-            except Exception:
-                log.flush()
-                print((work / "editor.log").read_bytes()[-8000:].decode("utf-8", "replace"), file=sys.stderr)
-                raise
-            finally:
-                if sys.platform == "win32":
-                    stop_windows_editor(editor.parent)
-                else:
-                    try:
-                        os.killpg(child.pid, signal.SIGTERM)
-                    except ProcessLookupError:
-                        pass
+        def run_session(document, port, script, arguments, label):
+            log_path = work / f"editor-{label}.log"
+            with log_path.open("wb") as log:
+                options = {"start_new_session": True} if sys.platform == "linux" else {"creationflags": subprocess.CREATE_NO_WINDOW}
+                child = subprocess.Popen([str(editor), f"--remote-debugging-port={port}", str(document)],
+                                         cwd=editor.parent, env=environment, stdout=log, stderr=log, **options)
                 try:
-                    child.wait(timeout=15)
-                except subprocess.TimeoutExpired:
-                    if sys.platform == "linux":
-                        os.killpg(child.pid, signal.SIGKILL)
+                    result = subprocess.run(["node", str(root / script), "--disposable-profile", str(port), *arguments],
+                                            check=True, timeout=360, capture_output=True, text=True)
+                    print(result.stdout, end="", flush=True)
+                    return result.stdout
+                except Exception as error:
+                    log.flush()
+                    if isinstance(error, subprocess.CalledProcessError):
+                        print(error.stdout or "", error.stderr or "", file=sys.stderr)
+                    print(log_path.read_bytes()[-8000:].decode("utf-8", "replace"), file=sys.stderr)
+                    raise
+                finally:
+                    if sys.platform == "win32":
+                        stop_windows_editor(editor.parent)
                     else:
-                        child.kill()
-                    child.wait(timeout=10)
+                        try:
+                            os.killpg(child.pid, signal.SIGTERM)
+                        except ProcessLookupError:
+                            pass
+                    try:
+                        child.wait(timeout=15)
+                    except subprocess.TimeoutExpired:
+                        if sys.platform == "linux":
+                            os.killpg(child.pid, signal.SIGKILL)
+                        else:
+                            child.kill()
+                        child.wait(timeout=10)
+
+        run_session(pdf, 9251, "tests/editor_smoke.js", [str(package.resolve()), version, pdf.name], "standard")
+        form = work / "Example User é" / "form source.pdf"
+        form.parent.mkdir(parents=True)
+        shutil.copyfile(root / "tests/fixtures/onlyoffice-form.pdf", form)
+        report = run_session(form, 9252, "tests/form_editor_smoke.js",
+                             [str(package.resolve()), str(form), str(pdf), str(state), version], "form")
+        result = next(json.loads(line) for line in report.splitlines() if line.startswith('{'))
+        verify_form_handoff(result["recoveryPath"], result["prepared"], result["comparisonPath"])
 
 
 if __name__ == "__main__":

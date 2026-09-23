@@ -7,7 +7,6 @@
     busy = false,
     lastError = "";
   const completed = new Set();
-  let formBaseline;
   function errorMessage(error) {
     const message = error.message || String(error);
     if (lastError === message) return;
@@ -36,34 +35,36 @@
     busy = true;
     lastError = "";
     try {
-      const source = adapter.snapshot(field);
+      const source = await adapter.snapshot(field);
+      if (source.kind === "onlyoffice-form") {
+        const result = await client.call({
+          op: "prepare",
+          field,
+          name: source.name,
+          sourcePath: source.sourcePath,
+          pdf: base64(source.bytes),
+        });
+        if (!result.prepared || !/^[0-9a-f]{64}$/.test(result.sha256 || "") ||
+            result.field !== field + "_af_image" || !adapter.stillCurrent(source, field))
+          throw new Error("The PDF form changed during preparation. Reopen it before signing.");
+        openPdf(result.path);
+        completed.add(field);
+        return;
+      }
       const request = {
         op: "sign",
         field,
         name: source.name,
         sourcePath: source.sourcePath,
+        pdf: base64(source.bytes),
       };
-      if (source.kind === "onlyoffice-form") {
-        if (!formBaseline || source.sourcePath !== formBaseline.path)
-          throw new Error("Reopen the PDF form before signing.");
-        request.kind = source.kind;
-        request.expectedSourceHash = formBaseline.hash;
-      } else request.pdf = base64(source.bytes);
       const result = await client.call(request);
       if (result.cancelled) return;
       if (!result.saved || !result.integrityVerified)
         throw new Error("The signed copy could not be verified and saved.");
       completed.add(field);
       try {
-        if (typeof result.path !== "string" || !/\.pdf$/i.test(result.path))
-          throw new Error("The saved PDF path was not returned.");
-        // Open by path; the recent-file command expects an index.
-        const desktop = parent.AscDesktopEditor;
-        if (typeof desktop._openExternalReference !== "function")
-          throw new Error(
-            "This editor does not expose the native file opener.",
-          );
-        desktop._openExternalReference(result.path);
+        openPdf(result.path);
       } catch (_) {
         errorMessage(
           new Error("The signed PDF was saved. Open it from: " + result.path),
@@ -74,6 +75,14 @@
     } finally {
       busy = false;
     }
+  }
+  function openPdf(path) {
+    if (typeof path !== "string" || !/\.pdf$/i.test(path))
+      throw new Error("The PDF path was not returned.");
+    const desktop = parent.AscDesktopEditor;
+    if (typeof desktop?._openExternalReference !== "function")
+      throw new Error("This editor does not expose the native file opener.");
+    desktop._openExternalReference(path);
   }
   Asc.plugin.init = async function () {
     const info = Asc.plugin.info || {};
@@ -86,15 +95,7 @@
     try {
       adapter = CACDesktop(parent);
       client = CACNativeClient();
-      const preflight = { op: "preflight" };
-      if (typeof adapter.sourcePath === "function")
-        preflight.sourcePath = adapter.sourcePath();
-      const ready = await client.call(preflight);
-      if (preflight.sourcePath) {
-        if (!/^[0-9a-f]{64}$/.test(ready.sourceHash || ""))
-          throw new Error("The saved PDF form could not be verified. Reopen it.");
-        formBaseline = { path: preflight.sourcePath, hash: ready.sourceHash };
-      }
+      await client.call({ op: "preflight" });
       if (disposed) return;
       adapter.attach(sign, errorMessage);
     } catch (error) {

@@ -156,6 +156,10 @@ function hostTest() {
     data: { ...event.data, request: { op: "execute", command: "bad" } },
   });
   assert.match(h.sent.at(-1).result.error, /Unknown/);
+  const prepare = harness("native-host.js");
+  prepare.handlers.message({ ...event, source: prepare.context.parent,
+    data: { ...event.data, request: { op: "prepare", pdf: "JVBERi0=", field: "Signature1" } } });
+  assert(prepare.context.process, "A card-free prepare request must reach the bundled worker.");
   const crash = harness("native-host.js");
   crash.handlers.message({
     ...event,
@@ -264,7 +268,7 @@ function launchPathTest() {
     fs.rmSync(root, { recursive: true, force: true });
   }
 }
-async function backgroundTest(kind = "pdf-signature") {
+async function backgroundTest() {
   let click, finish;
   const requests = [],
     opened = [],
@@ -280,19 +284,17 @@ async function backgroundTest(kind = "pdf-signature") {
     btoa: (value) => Buffer.from(value, "binary").toString("base64"),
     CACNativeClient: () => ({
       call: (request) => {
-        if (request.op === "preflight") return Promise.resolve({ ok: true, sourceHash: "c".repeat(64) });
+        if (request.op === "preflight") return Promise.resolve({ ok: true });
         requests.push(request);
         return new Promise((resolve) => (finish = resolve));
       },
       close() {},
     }),
     CACDesktop: () => ({
-      sourcePath: kind === "onlyoffice-form" ? () => "C:\\example.pdf" : undefined,
       attach: (fn) => (click = fn),
       detach() {},
       snapshot: () => ({
-        bytes: kind === "onlyoffice-form" ? undefined : Buffer.from("%PDF-test"),
-        kind,
+        bytes: Buffer.from("%PDF-test"),
         name: "example.pdf",
         sourcePath: "C:\\example.pdf",
       }),
@@ -307,15 +309,10 @@ async function backgroundTest(kind = "pdf-signature") {
   await first;
   assert.equal(opened.length, 0);
   const retry = click("PreparedBy");
+  await Promise.resolve();
   assert.equal(requests.length, 2);
   assert.equal(requests[1].op, "sign");
-  if (kind === "onlyoffice-form") {
-    assert.equal(requests[1].kind, kind);
-    assert.equal(requests[1].pdf, undefined);
-    assert.equal(requests[1].expectedSourceHash, "c".repeat(64));
-  } else {
-    assert.ok(requests[1].pdf);
-  }
+  assert.ok(requests[1].pdf);
   finish({
     saved: true,
     integrityVerified: true,
@@ -334,7 +331,6 @@ if (require.main === module) (async () => {
   hostTest();
   launchPathTest();
   await backgroundTest();
-  await backgroundTest("onlyoffice-form");
   console.log(
     "PASS: native origin checks, lifecycle, recovery errors, request chunking, startup timeout and spaced launch paths",
   );

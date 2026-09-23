@@ -9,6 +9,7 @@ from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import patch
 
+from form_fixture import form_pdf
 from standalone_worker import SigningSession, valid_windows_destination
 
 
@@ -42,6 +43,7 @@ class StandaloneRecoveryTests(unittest.TestCase):
             op="sign",
             pdf=base64.b64encode(self.original.read_bytes()).decode(),
             field="PreparedBy",
+            sourcePath=str(self.original),
         )
 
     def tearDown(self):
@@ -118,34 +120,53 @@ class StandaloneRecoveryTests(unittest.TestCase):
                 session.sign(self.request)
             card.assert_not_called()
 
-    def test_onlyoffice_form_reads_saved_path_without_encoded_pdf(self):
+    def test_onlyoffice_form_prepares_loaded_bytes_without_card(self):
+        pdf, _ = form_pdf()
+        self.original.write_bytes(b"%PDF-replaced after editor load")
         request = {
-            "op": "sign", "kind": "onlyoffice-form", "field": "Signature1",
+            "op": "prepare", "field": "Signature1",
             "sourcePath": str(self.original), "name": self.original.name,
-            "expectedSourceHash": hashlib.sha256(self.original.read_bytes()).hexdigest(),
+            "pdf": base64.b64encode(pdf).decode(),
         }
+        with patch("platform_card.card_signer") as card:
+            result = self.session.prepare_form(request)
+            card.assert_not_called()
+        prepared_path = Path(result["path"])
+        prepared = prepared_path.read_bytes()
+        self.assertEqual(result["sha256"], hashlib.sha256(prepared).hexdigest())
+        self.assertEqual(result["field"], "Signature1_af_image")
+        self.assertNotIn(b"/MetaOForm", prepared)
+        self.assertEqual(self.original.read_bytes(), b"%PDF-replaced after editor load")
+        self.assertEqual(
+            self.session.prepared_source(str(prepared_path), prepared, result["field"])["source"],
+            str(self.original),
+        )
         signer = object()
+        signing_request = {
+            "op": "sign", "field": result["field"], "sourcePath": str(prepared_path),
+            "pdf": base64.b64encode(prepared).decode(), "name": prepared_path.name,
+        }
         with patch("platform_card.card_signer", return_value=nullcontext(signer)) as card, \
              patch("signing.sign_bytes", return_value=self.content) as sign:
-            _, metadata, recovered = self.session.sign(request)
+            _, metadata, recovered = self.session.sign(signing_request)
         self.assertFalse(recovered)
         card.assert_called_once()
-        sign.assert_called_once_with(self.original.read_bytes(), signer, {
-            "field": "Signature1", "kind": "onlyoffice-form",
+        sign.assert_called_once_with(prepared, signer, {
+            "field": result["field"], "kind": "pdf-signature",
         })
         self.assertEqual(metadata["source"], str(self.original))
+        self.assertEqual(metadata["preparedPath"], str(prepared_path))
+        for path in (self.original, prepared_path):
+            with self.assertRaisesRegex(ValueError, "preserve the original"):
+                self.session.save("ignored", metadata, path)
         with patch("platform_card.card_signer") as card:
-            with self.assertRaisesRegex(ValueError, "saved local PDF"):
-                self.session.sign({**request, "sourcePath": "form.pdf"})
+            with self.assertRaisesRegex(ValueError, "prepared PDF changed"):
+                self.session.sign({**signing_request, "pdf": base64.b64encode(pdf).decode()})
             card.assert_not_called()
+        prepared_path.with_suffix(".json").unlink()
         with patch("platform_card.card_signer") as card:
-            with self.assertRaisesRegex(ValueError, "Reopen the PDF form"):
-                self.session.sign({**request, "expectedSourceHash": ""})
-            card.assert_not_called()
-        self.original.write_bytes(b"%PDF-changed after opening")
-        with patch("platform_card.card_signer") as card:
-            with self.assertRaisesRegex(ValueError, "changed after opening"):
-                self.session.sign(request)
+            with self.assertRaisesRegex(ValueError, "handoff is missing"):
+                self.session.sign(signing_request)
             card.assert_not_called()
 
     def test_desktop_failure_is_rejected_before_card_access(self):

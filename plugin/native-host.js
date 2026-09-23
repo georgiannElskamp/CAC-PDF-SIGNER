@@ -69,7 +69,7 @@
       send({ type: "result", id, result });
     }
     try {
-      if (!request || !["sign", "health", "preflight"].includes(request.op))
+      if (!request || !["sign", "prepare", "health", "preflight"].includes(request.op))
         throw new Error("Unknown CAC operation.");
       const input = JSON.stringify({ ...request, acknowledgeResult: true }) + "\n";
       if (input.length > 56 * 1024 * 1024)

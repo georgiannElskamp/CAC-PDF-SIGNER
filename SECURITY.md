@@ -8,6 +8,8 @@ The background and native frames validate message sources and origins. The nativ
 
 Signed documents contain the signing certificate and visible identity details. Recovery PDFs and records are stored under `%LOCALAPPDATA%\ONLYOFFICE-CAC-Signature\Signed` and survive uninstallation. Treat these files as confidential documents.
 
+For an ONLYOFFICE form, the first click creates an unsigned review PDF and a hash-bound handoff record under `Prepared` in the same application-data directory. They may contain confidential document content and the original file path. The worker removes entries older than 30 days during a later form preparation; uninstalling does not remove them. The card is accessed only after the review PDF's signature field is clicked.
+
 Linux recovery files use the user's XDG data directory with private file permissions. Signing requires reader permissions granted by the operating system; the plugin does not elevate privileges.
 
 Signature verification checks integrity, not certificate trust or revocation. Signing time comes from the local clock. The plugin assumes the local account and editor installation are trusted.
@@ -16,7 +18,7 @@ Signature verification checks integrity, not certificate trust or revocation. Si
 
 Use a sample PDF and redact paths and identity details from error reports. Report vulnerabilities through GitHub private security reporting when available, or ask a maintainer for a private channel.
 
-The current release is a candidate with hardware validation in progress. Supported platforms and outstanding checks are recorded in [TESTING.md](docs/TESTING.md). Other ONLYOFFICE versions and sandboxed installations are not assumed compatible.
+Supported platforms and outstanding hardware checks are recorded in [TESTING.md](docs/TESTING.md). Other ONLYOFFICE versions and sandboxed installations are not assumed compatible.
 
 ## Release checks
 

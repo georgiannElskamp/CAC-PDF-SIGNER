@@ -119,11 +119,12 @@ function adapterTest() {
   assert.throws(() => context.window.CACDesktop(host), /ONLYOFFICE unknown needs/);
 }
 adapterTest();
-function formAdapterTest(version) {
+async function formAdapterTest(version) {
   const callbacks = {}, timers = [], clicks = [], errors = [], shown = [];
+  const reads = [];
   const dialog = { show() { shown.push("native"); } };
   const originalShow = dialog.show;
-  let modified = false, preview = true;
+  let modified = false, preview = true, sourcePath = "C:\\Test User é%\\form.pdf";
   const api = {
     asc_getPdfProps: vm.runInNewContext("(function(){return null})"),
     GetVersion: () => version,
@@ -136,16 +137,47 @@ function formAdapterTest(version) {
   };
   const host = {
     Asc: { editor: api },
-    AscDesktopEditor: { LocalFileGetSourcePath: () => "C:\\Test User\\form.pdf" },
+    AscCommon: { Ss: { tia: "file:///C:/Test%20User%20%C3%A9%25/recover/DE_123" } },
+    AscDesktopEditor: {
+      LocalFileGetSourcePath: () => sourcePath,
+      loadLocalFile(path, callback) {
+        reads.push(path);
+        callback(Buffer.from(path.endsWith("asc_name.info")
+          ? '<info type="87" name="form.pdf" />' : "%PDF-1.7 recovery"));
+      },
+    },
     Common: { Views: { PdfSignDialog: function () {} } },
   };
   host.Common.Views.PdfSignDialog.prototype = dialog;
-  const context = { window: { setTimeout: (fn) => timers.push(fn) } };
+  class DOMParser {
+    parseFromString(xml) {
+      const match = xml.match(/<info type="([^"]+)" name="([^"]+)"\s*\/>/);
+      return {
+        documentElement: {
+          tagName: match ? "info" : "error",
+          getAttribute: (name) => match ? match[name === "type" ? 1 : 2] : null,
+        },
+        getElementsByTagName: () => match ? [] : ["parsererror"],
+      };
+    }
+  }
+  const context = {
+    window: { setTimeout: (fn) => timers.push(fn) },
+    setTimeout, clearTimeout, DOMParser, TextDecoder, URL, Uint8Array,
+  };
   vm.createContext(context);
   vm.runInContext(fs.readFileSync(path.join(root, "plugin/desktop-adapter.js"), "utf8"), context);
   const adapter = context.window.CACDesktop(host);
   adapter.attach((field) => clicks.push(field), (error) => errors.push(error));
-  assert.equal(adapter.snapshot("Signature1").kind, "onlyoffice-form");
+  const snapshot = await adapter.snapshot("Signature1");
+  assert.equal(snapshot.kind, "onlyoffice-form");
+  assert.equal(Buffer.from(snapshot.bytes).toString(), "%PDF-1.7 recovery");
+  assert.equal(snapshot.sourcePath, sourcePath);
+  assert.ok(adapter.stillCurrent(snapshot, "Signature1"));
+  assert.deepEqual(reads, [
+    "C:\\Test User é%\\recover\\DE_123\\asc_name.info",
+    "C:\\Test User é%\\recover\\DE_123\\form.pdf",
+  ]);
   const action = { type: 12, pr: {
     get_InternalId: () => "1603",
     get_FormPr: () => ({ get_Key: () => "Signature1" }),
@@ -183,11 +215,27 @@ function formAdapterTest(version) {
   callbacks.asc_onShowContentControlsActions(action);
   timers.shift()();
   assert.deepEqual(shown, ["native", "native"]);
+  assert.equal(adapter.stillCurrent(snapshot, "Signature1"), false);
+  preview = true;
+  const originalLoad = host.AscDesktopEditor.loadLocalFile;
+  host.AscDesktopEditor.loadLocalFile = (path, callback) => {
+    originalLoad(path, callback);
+    if (path.endsWith("asc_name.info")) sourcePath = "C:\\Test User é%\\another.pdf";
+  };
+  await assert.rejects(adapter.snapshot("Signature1"), /active PDF form changed/);
+  sourcePath = snapshot.sourcePath;
+  host.AscDesktopEditor.loadLocalFile = (path, callback) => {
+    if (path.endsWith("asc_name.info")) callback(null);
+    else originalLoad(path, callback);
+  };
+  await assert.rejects(adapter.snapshot("Signature1"), /recovery copy is missing/);
+  host.AscDesktopEditor.loadLocalFile = originalLoad;
   modified = true;
-  assert.throws(() => adapter.snapshot("Signature1"), /reopen/);
+  await assert.rejects(adapter.snapshot("Signature1"), /reopen/);
   callbacks.asc_onDocumentModifiedChanged();
   modified = false;
-  assert.throws(() => adapter.snapshot("Signature1"), /reopen/);
+  await assert.rejects(adapter.snapshot("Signature1"), /reopen/);
+  assert.equal(adapter.stillCurrent(snapshot, "Signature1"), false);
   assert.equal(errors.length, 0);
   adapter.detach();
   assert.equal(dialog.show, originalShow);
@@ -195,8 +243,6 @@ function formAdapterTest(version) {
   api.GetVersion = () => "9.4.0.128";
   assert.throws(() => context.window.CACDesktop(host), /adapter update/);
 }
-formAdapterTest("9.4.0");
-formAdapterTest("9.4.0.129");
 async function startupTest(fail, unload, info = { editorType: "pdf" }) {
   const events = [], handlers = {};
   let resolve, reject;
@@ -210,12 +256,9 @@ async function startupTest(fail, unload, info = { editorType: "pdf" }) {
     },
     CACNativeClient: () => ({ call: (request) => {
       assert.equal(request.op, "preflight");
-      if (info.editorType === "word")
-        assert.equal(request.sourcePath, "C:\\Test User\\form.pdf");
       events.push("preflight"); return pending;
     }, close: () => events.push("close") }),
     CACDesktop: () => ({
-      sourcePath: info.editorType === "word" ? () => "C:\\Test User\\form.pdf" : undefined,
       attach: () => events.push("attach"), detach: () => events.push("detach"),
     }),
   };
@@ -225,32 +268,35 @@ async function startupTest(fail, unload, info = { editorType: "pdf" }) {
   assert.deepEqual(events, ["preflight"]);
   if (unload) handlers.unload();
   if (fail) reject(new Error("Startup failed"));
-  else resolve({ ok: true, sourceHash: "a".repeat(64) });
+  else resolve({ ok: true });
   await started;
   assert.deepEqual(events, unload ? ["preflight", "detach", "close"] : ["preflight", fail ? "error" : "attach"]);
 }
-async function formBaselineTest() {
-  let click, sourcePath = "C:\\Test User\\form.pdf";
-  const requests = [], warnings = [];
+async function formHandoffTest() {
+  let click, current = true;
+  const requests = [], warnings = [], opened = [];
   const context = {
     Asc: { plugin: { info: { editorType: "word", documentTitle: "form.pdf" } } },
     window: { addEventListener() {} },
+    btoa: (value) => Buffer.from(value, "binary").toString("base64"),
     parent: {
       Asc: { editor: { pluginMethod_GetAllForms() {} } },
-      AscDesktopEditor: { _openExternalReference() {} },
+      AscDesktopEditor: { _openExternalReference: (path) => opened.push(path) },
       Common: { UI: { warning: (message) => warnings.push(message) } },
     },
     CACDesktop: () => ({
-      sourcePath: () => sourcePath,
-      snapshot: () => ({ kind: "onlyoffice-form", sourcePath, name: "form.pdf" }),
+      snapshot: () => ({ kind: "onlyoffice-form", bytes: Buffer.from("%PDF-review"),
+        sourcePath: "C:\\Test User\\form.pdf", name: "form.pdf" }),
+      stillCurrent: () => current,
       attach: (handler) => { click = handler; }, detach() {},
     }),
     CACNativeClient: () => ({
       call: async (request) => {
         requests.push(request);
-        return request.op === "preflight"
-          ? { ok: true, sourceHash: "b".repeat(64) }
-          : { ok: true, saved: true, integrityVerified: true, path: "C:\\signed.pdf" };
+        return request.op === "preflight" ? { ok: true } : {
+          ok: true, prepared: true, field: request.field + "_af_image",
+          sha256: "b".repeat(64), path: "C:\\review.pdf",
+        };
       },
       close() {},
     }),
@@ -259,18 +305,25 @@ async function formBaselineTest() {
   await context.Asc.plugin.init();
   click("Signature1");
   await new Promise(setImmediate);
-  assert.equal(requests[1].expectedSourceHash, "b".repeat(64));
+  assert.equal(requests[1].op, "prepare");
+  assert.equal(Buffer.from(requests[1].pdf, "base64").toString(), "%PDF-review");
   assert.equal(requests[1].sourcePath, "C:\\Test User\\form.pdf");
-  sourcePath = "C:\\Test User\\another.pdf";
-  click("Signature2");
+  assert.deepEqual(opened, ["C:\\review.pdf"]);
+  click("Signature1");
   await new Promise(setImmediate);
   assert.equal(requests.length, 2);
+  current = false;
+  click("Signature2");
+  await new Promise(setImmediate);
+  assert.equal(requests.length, 3);
   assert.equal(warnings.length, 1);
+  assert.deepEqual(opened, ["C:\\review.pdf"]);
 }
 Promise.all([
+  formAdapterTest("9.4.0"), formAdapterTest("9.4.0.129"),
   startupTest(false, false), startupTest(true, false), startupTest(false, true),
   startupTest(false, false, { editorType: "word", documentTitle: "form.pdf" }),
-  formBaselineTest(),
+  formHandoffTest(),
 ])
   .then(() => console.log("PASS: PDF and ONLYOFFICE form clicks, unsaved edits, version guard, startup and cleanup"))
   .catch(error => { console.error(error); process.exitCode = 1; });

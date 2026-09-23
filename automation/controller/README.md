@@ -23,6 +23,8 @@ The controller runs at minutes 17 and 47 each hour; discovery runs daily at 08:2
 
 Only eligible research PRs can merge automatically. Controller/approval/release-policy changes require manual maintenance. A versioned candidate is frozen on `release-verification`; its App-authored PR always waits for the owner's approval and manual merge into `main`. No controller path merges main. See the public [operation guide](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/blob/research/docs/AUTOMATION.md) for required checks and coverage limits.
 
+Release notes include merged PRs whose merge commits are in research after the last accepted snapshot. The controller rejects an incomplete or diverged comparison instead of guessing from publication dates.
+
 Use **Discovery > Retest completed combinations** only after investigating a failure. An approved editor control distinguishes environment/harness failures from new upstream behavior. Health detects stale discovery but cannot independently detect an outage of all GitHub scheduling.
 
 Reviewed source templates live in `automation/controller/` in the public repository. Copy its Python modules and README to this repository's root and its workflow templates to `.github/workflows/`. No public PR code is executed in this repository with credentials. Changes here are not deployed automatically from public PRs.
