@@ -1,7 +1,7 @@
 name: Dependency review
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review, edited]
+    types: [opened, synchronize, reopened, ready_for_review]
 permissions:
   contents: read
 jobs:

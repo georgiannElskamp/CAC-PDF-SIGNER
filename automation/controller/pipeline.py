@@ -424,6 +424,8 @@ def main():
                 print(f"Dependency PR #{pull['number']} routed to research", flush=True)
     pulls = [api(REPO + f"/pulls/{args.pull}")] if args.pull else pages(REPO + "/pulls?state=open&base=research")
     for pull in pulls[:5]:
+        if not args.pull:
+            pull = api(REPO + f"/pulls/{pull['number']}")
         process_pull(state, pull, args.dry_run)
     if not args.pull:
         promote(state, args.release_type, args.dry_run)
