@@ -35,6 +35,10 @@ jobs:
         id: pdf
         continue-on-error: true
         run: python -B tests/feasibility/pdf_corpus.py
+      - name: Check destination failures and retained recovery
+        id: save
+        continue-on-error: true
+        run: python -B tests/feasibility/save_faults.py
       - name: Check evidence policy failure controls
         id: gate
         continue-on-error: true
@@ -51,8 +55,9 @@ jobs:
         env:
           LIFECYCLE: ${{ steps.lifecycle.outcome }}
           PDF: ${{ steps.pdf.outcome }}
+          SAVE: ${{ steps.save.outcome }}
           GATE: ${{ steps.gate.outcome }}
-        run: test "$LIFECYCLE" = success && test "$PDF" = success && test "$GATE" = success
+        run: test "$LIFECYCLE" = success && test "$PDF" = success && test "$SAVE" = success && test "$GATE" = success
   windows:
     if: contains(github.event.head_commit.message, '[probe:all]') || contains(github.event.head_commit.message, '[probe:windows]')
     runs-on: windows-2025
