@@ -16,7 +16,7 @@ def eligible(pull):
             and pull["base"]["ref"] == "research"
             and pull["head"]["repo"] and pull["head"]["repo"]["full_name"] == PUBLIC
             and pull["user"]["login"] in AUTHORS
-            and pull["head"]["ref"] != "release-verification")
+            and pull["head"]["ref"] not in PERMANENT)
 
 
 def pin_only(before, after):

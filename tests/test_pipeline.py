@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -12,6 +13,7 @@ import pipeline
 import pipeline_policy as policy
 import promote_release as release
 import release_manifest
+import repair_patch
 
 SHA = 'a' * 40
 MAIN = 'b' * 40
@@ -33,6 +35,7 @@ class PipelinePolicyTests(unittest.TestCase):
         self.assertTrue(policy.eligible(pull()))
         for mutate in (lambda p: p['base'].update(ref='main'), lambda p: p.update(draft=True),
                        lambda p: p['user'].update(login='untrusted'), lambda p: p['head'].update(repo=None),
+                       lambda p: p['head'].update(ref='main'), lambda p: p['head'].update(ref='research'),
                        lambda p: p['head'].update(ref='release-verification'), lambda p: p.update(state='closed')):
             value = pull(); mutate(value)
             self.assertFalse(policy.eligible(value))
@@ -72,13 +75,21 @@ class PipelinePolicyTests(unittest.TestCase):
         self.assertEqual(policy.review_result(SHA, request, [summary], [finding], [], [reaction]), 'findings')
 
     def test_missing_foreign_failed_and_newer_checks_cannot_pass(self):
-        checks = [{'name': n, 'app': {'id': 15368}, 'started_at': STAMP, 'status': 'completed', 'conclusion': 'success'} for n in pipeline.REQUIRED]
-        with patch.object(pipeline, 'pages', return_value=checks):
+        checks = [{'name': n, 'app': {'id': 15368}, 'check_suite': {'id':1}, 'started_at': STAMP, 'status': 'completed', 'conclusion': 'success'} for n in pipeline.REQUIRED]
+        def responses(rows):
+            return lambda path, **kwargs: ([dict(run(),check_suite_id=1,pull_requests=[{'number':123}])] if '/runs?' in path else rows)
+        with patch.object(pipeline, 'pages', side_effect=responses(checks)):
             self.assertEqual(pipeline.ci_state(pull())[0], 'passed')
         for bad in (checks[:-1], [dict(c, app={'id': 7}) for c in checks],
                     checks + [dict(checks[0], started_at='2026-01-02', conclusion='failure')]):
-            with patch.object(pipeline, 'pages', return_value=bad):
+            with patch.object(pipeline, 'pages', side_effect=responses(bad)):
                 self.assertNotEqual(pipeline.ci_state(pull())[0], 'passed')
+
+    def test_obsolete_workflow_pass_cannot_mask_running_replacement(self):
+        old = dict(run(),check_suite_id=1,pull_requests=[{'number':123}])
+        new = dict(old,id=43,status='in_progress',conclusion=None)
+        with patch.object(pipeline,'pages',return_value=[old,new]):
+            self.assertEqual(pipeline.ci_state(pull())[0],'pending')
 
     def test_newer_failed_build_does_not_fall_back_to_older_pass(self):
         with patch.object(pipeline, 'pages', return_value=[run(), dict(run(), id=43, conclusion='failure')]):
@@ -96,11 +107,39 @@ class PipelinePolicyTests(unittest.TestCase):
             request.assert_not_called()
             self.assertEqual(status.call_args.args[1], 'failure')
 
+    def test_policy_change_requires_owner_approval_on_current_commit(self):
+        good = {'user':{'login':policy.OWNER},'state':'APPROVED','commit_id':SHA,'submitted_at':STAMP}
+        with patch.object(pipeline,'pages',return_value=[good]):
+            self.assertTrue(pipeline.owner_approved(pull()))
+        for reviews in ([], [dict(good,commit_id=MAIN)], [dict(good,user={'login':policy.CODEX})],
+                        [good,dict(good,state='DISMISSED',submitted_at='2026-01-02')]):
+            with patch.object(pipeline,'pages',return_value=reviews):
+                self.assertFalse(pipeline.owner_approved(pull()))
+
     def test_main_pr_never_reaches_merge_code(self):
         value = pull(); value['base']['ref'] = 'main'
         with patch.object(pipeline, 'api') as api:
             pipeline.process_pull(Mock(), value)
             api.assert_not_called()
+
+    def test_invalid_repair_isolated_to_its_pr_and_not_reparsed(self):
+        state = Mock(data={'pulls':{}})
+        other = pull(); other['number']=124
+        with patch.object(pipeline,'process_pull',side_effect=[ValueError('Invalid repair hash'),None]) as process,patch.object(pipeline,'status') as status:
+            pipeline.reconcile_pull(state,pull())
+            pipeline.reconcile_pull(state,other)
+            pipeline.reconcile_pull(state,pull())
+            self.assertEqual(process.call_count,2)
+            self.assertEqual(status.call_args.args[1],'failure')
+        self.assertEqual(state.data['pulls']['123']['heads'][SHA]['attention'],'Invalid repair hash')
+
+    def test_retarget_events_remain_enabled_for_all_required_pr_workflows(self):
+        root=Path(__file__).resolve().parents[1]
+        for name in ('checks.yml','dependency-review.yml','pr-build.yml'):
+            workflow=(root/'.github/workflows'/name).read_text(encoding='utf-8')
+            declared=re.search(r'(?m)^    types: \[([^\]]+)\]',workflow)
+            self.assertIsNotNone(declared)
+            self.assertIn('edited',{event.strip() for event in declared.group(1).split(',')})
 
     def test_changed_head_after_review_cannot_merge(self):
         state = Mock(data={'pulls': {}})
@@ -184,3 +223,63 @@ class ApprovedPublicationTests(unittest.TestCase):
         self.assertEqual(release_manifest.resolve(Mock(side_effect=responses), approved), approved)
         responses[1] = {'object':{'type':'commit','sha':MAIN}}
         with self.assertRaises(ValueError): release_manifest.resolve(Mock(side_effect=responses), approved)
+
+
+class RepairPatchTests(unittest.TestCase):
+    def payload(self):
+        return {'schema':1,'base':SHA,'request':'test-marker','files':[{'path':'tests/probe.py',
+            'beforeSha256':hashlib.sha256(b'old\n').hexdigest(),'content':'new\n'}]}
+
+    def parse(self, value):
+        return repair_patch.parse('<cac-repair-patch>'+json.dumps(value)+'</cac-repair-patch>',SHA,'test-marker')
+
+    def test_matching_existing_text_replacement_is_bounded(self):
+        files=self.parse(self.payload())
+        self.assertEqual(repair_patch.replacement(files[0],'old\n','100644')['content'],'new\n')
+        for mode in ('120000','160000',None):
+            with self.assertRaises(ValueError): repair_patch.replacement(files[0],'old\n',mode)
+        with self.assertRaises(ValueError): repair_patch.replacement(files[0],'changed\n','100644')
+
+    def test_wrong_request_policy_paths_and_binary_text_are_rejected(self):
+        changes=[lambda p:p.update(base=MAIN),lambda p:p.update(request='other'),lambda p:p.update(files=[]),
+            lambda p:p.update(files=p['files']*6),lambda p:p['files'][0].update(content='a'*50001),
+            lambda p:p['files'][0].update(content='bad'+chr(0))]
+        for path in ('../escape.py','/absolute.py','.github/workflows/run.yml','automation/controller/pipeline.py',
+                     'tools/promote_release.py','tests/test_pipeline.py','image.png','a//b.py'):
+            changes.append(lambda p,path=path:p['files'][0].update(path=path))
+        for change in changes:
+            value=self.payload();change(value)
+            with self.assertRaises(ValueError):self.parse(value)
+
+    def test_duplicate_json_properties_and_ambiguous_blocks_are_rejected(self):
+        value=json.dumps(self.payload())
+        with self.assertRaises(ValueError):
+            repair_patch.parse('<cac-repair-patch>'+value.replace('"schema": 1','"schema": 1, "schema": 1')+'</cac-repair-patch>',SHA,'test-marker')
+        block='<cac-repair-patch>'+value+'</cac-repair-patch>'
+        with self.assertRaises(ValueError):repair_patch.parse(block+block,SHA,'test-marker')
+        self.assertIsNone(repair_patch.parse('A cloud task summary without a patch',SHA,'test-marker'))
+
+    def test_controller_applies_only_the_pinned_text_to_a_live_temporary_branch(self):
+        reply={'id':7,'user':{'login':policy.CODEX},'created_at':STAMP,
+            'body':'<cac-repair-patch>'+json.dumps(self.payload())+'</cac-repair-patch>'}
+        record={'repair':{'created_at':STAMP,'marker':'test-marker'}}
+        state=Mock()
+        def api(path,method='GET',body=None):
+            if path.endswith('/git/commits/'+SHA):return {'tree':{'sha':'original-tree'}}
+            if path.endswith('/git/trees/original-tree?recursive=1'):return {'truncated':False,'tree':[{'path':'tests/probe.py','mode':'100644','type':'blob'}]}
+            if path.endswith('/pulls/123'):return pull()
+            if method=='POST' and path.endswith('/git/trees'):
+                self.assertEqual(body['tree'],[{'path':'tests/probe.py','mode':'100644','type':'blob','content':'new\n'}])
+                return {'sha':'updated-tree'}
+            if method=='POST' and path.endswith('/git/commits'):
+                self.assertEqual(body['parents'],[SHA]);return {'sha':MAIN}
+            if method=='PATCH' and path.endswith('/git/refs/heads/change'):
+                self.assertEqual(body,{'sha':MAIN,'force':False});return {}
+            self.fail(path)
+        with patch.object(pipeline,'pages',return_value=[reply]),patch.object(pipeline,'text_file',return_value='old\n'),patch.object(pipeline,'api',side_effect=api):
+            self.assertTrue(pipeline.apply_repair(state,record,pull()))
+        self.assertEqual(record['patch']['state'],'applied')
+        self.assertEqual(state.save.call_count,2)
+        with patch.object(pipeline,'api') as request:
+            with self.assertRaises(RuntimeError):pipeline.apply_repair(state,record,pull())
+            request.assert_not_called()
