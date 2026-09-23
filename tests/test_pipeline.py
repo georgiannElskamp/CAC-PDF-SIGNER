@@ -73,13 +73,21 @@ class PipelinePolicyTests(unittest.TestCase):
         self.assertEqual(policy.review_result(SHA, request, [summary], [finding], [], [reaction]), 'findings')
 
     def test_missing_foreign_failed_and_newer_checks_cannot_pass(self):
-        checks = [{'name': n, 'app': {'id': 15368}, 'started_at': STAMP, 'status': 'completed', 'conclusion': 'success'} for n in pipeline.REQUIRED]
-        with patch.object(pipeline, 'pages', return_value=checks):
+        checks = [{'name': n, 'app': {'id': 15368}, 'check_suite': {'id':1}, 'started_at': STAMP, 'status': 'completed', 'conclusion': 'success'} for n in pipeline.REQUIRED]
+        def responses(rows):
+            return lambda path, **kwargs: ([dict(run(),check_suite_id=1,pull_requests=[{'number':123}])] if '/runs?' in path else rows)
+        with patch.object(pipeline, 'pages', side_effect=responses(checks)):
             self.assertEqual(pipeline.ci_state(pull())[0], 'passed')
         for bad in (checks[:-1], [dict(c, app={'id': 7}) for c in checks],
                     checks + [dict(checks[0], started_at='2026-01-02', conclusion='failure')]):
-            with patch.object(pipeline, 'pages', return_value=bad):
+            with patch.object(pipeline, 'pages', side_effect=responses(bad)):
                 self.assertNotEqual(pipeline.ci_state(pull())[0], 'passed')
+
+    def test_obsolete_workflow_pass_cannot_mask_running_replacement(self):
+        old = dict(run(),check_suite_id=1,pull_requests=[{'number':123}])
+        new = dict(old,id=43,status='in_progress',conclusion=None)
+        with patch.object(pipeline,'pages',return_value=[old,new]):
+            self.assertEqual(pipeline.ci_state(pull())[0],'pending')
 
     def test_newer_failed_build_does_not_fall_back_to_older_pass(self):
         with patch.object(pipeline, 'pages', return_value=[run(), dict(run(), id=43, conclusion='failure')]):

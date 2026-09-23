@@ -32,10 +32,23 @@ def status(sha, state, description, url=None, context="Research review"):
 
 
 def ci_state(pull):
-    checks = pages(REPO + "/commits/" + pull["head"]["sha"] + "/check-runs?filter=latest", key="check_runs")
+    suites, failed = set(), []
+    for workflow in ("checks.yml", "dependency-review.yml", "pr-build.yml"):
+        runs = pages(REPO + f"/actions/workflows/{workflow}/runs?event=pull_request&head_sha={pull['head']['sha']}", key="workflow_runs")
+        runs = [r for r in runs if any(p["number"] == pull["number"] for p in r.get("pull_requests", []))]
+        latest_run = max(runs, key=lambda r: (r["id"], r.get("run_attempt", 1))) if runs else None
+        if not latest_run or latest_run["status"] != "completed":
+            return "pending", []
+        if latest_run["conclusion"] != "success":
+            failed.append(workflow)
+        suites.add(latest_run["check_suite_id"])
+    if failed:
+        return "failed", failed
+    checks = pages(REPO + "/commits/" + pull["head"]["sha"] + "/check-runs?filter=all", key="check_runs")
     latest = {}
     for check in sorted(checks, key=lambda c: c.get("started_at") or ""):
-        if check["app"]["id"] == 15368 and check["name"] in REQUIRED:
+        if (check["app"]["id"] == 15368 and check["name"] in REQUIRED
+                and check["check_suite"]["id"] in suites):
             latest[check["name"]] = check
     if set(latest) != REQUIRED or any(c["status"] != "completed" for c in latest.values()):
         return "pending", []
