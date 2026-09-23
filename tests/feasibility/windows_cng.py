@@ -33,7 +33,7 @@ try:
     thumbprint=certificate["thumbprint"]
     with tempfile.TemporaryDirectory(prefix="cac-cng-probe-") as temp:
         work=Path(temp)
-        extracted=extract(package,work/"Example User ÃƒÆ’Ã‚Â©")
+        extracted=extract(package,work/"Example User \u00e9")
         candidates=list((extracted/"native").rglob("pdfsign-bridge.exe"))
         assert len(candidates)==1, "Packaged bridge missing or ambiguous"
         bridge=candidates[0]

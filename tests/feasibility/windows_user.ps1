@@ -1,10 +1,11 @@
 $ErrorActionPreference='Stop'
 if($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted'){throw 'Disposable hosted runner required'}
-$accountName='CAC Probe ÃƒÂ©'
+$accountName='CAC Probe '+[char]0xE9
 $password=[Guid]::NewGuid().ToString('N')+'aA!7'
 $secure=ConvertTo-SecureString $password -AsPlainText -Force
 $password=$null
 $user=New-LocalUser -Name $accountName -Password $secure -PasswordNeverExpires
+try{
 $group=Get-LocalGroup -SID 'S-1-5-32-545'
 Add-LocalGroupMember -Group $group -Member $user
 Add-Type -TypeDefinition @"
@@ -18,10 +19,22 @@ public static class ProbeProfile {
 "@
 $profileBuffer=[Text.StringBuilder]::new(1024)
 $profileResult=[ProbeProfile]::CreateProfile($user.SID.Value,$accountName,$profileBuffer,1024)
+$profileEvidence=@{probe='windows-profile-setup';source=$env:GITHUB_SHA;runner=$env:ImageOS;
+    status=if($profileResult -eq 0){'passed'}else{'blocked'};unicodeResult=$profileResult;
+    profileService=(Get-Service ProfSvc).Status.ToString();stage='CreateProfile before editor launch'}
+if($profileResult -ne 0){
+    $controlName='CACAsciiControl'
+    $control=New-LocalUser -Name $controlName -Password $secure -PasswordNeverExpires
+    try{
+        $controlBuffer=[Text.StringBuilder]::new(1024)
+        $profileEvidence.asciiControlResult=[ProbeProfile]::CreateProfile($control.SID.Value,$controlName,$controlBuffer,1024)
+    }finally{Remove-LocalUser -Name $controlName}
+}
+$profileEvidence | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $env:PROBE_REPORT 'windows-profile-setup.json') -Encoding utf8
 if($profileResult -ne 0){throw ('Disposable profile creation failed: '+$profileResult)}
 $profilePath=$profileBuffer.ToString()
 $credential=[PSCredential]::new(($env:COMPUTERNAME+'\'+$accountName),$secure)
-$shared=Join-Path $env:RUNNER_TEMP 'CAC feasibility ÃƒÂ©'
+$shared=Join-Path $env:RUNNER_TEMP ('CAC feasibility '+[char]0xE9)
 New-Item -ItemType Directory -Path $shared -Force | Out-Null
 $report=Join-Path $shared 'report'
 New-Item -ItemType Directory -Path $report -Force | Out-Null
@@ -39,7 +52,6 @@ $entry=Join-Path $env:GITHUB_WORKSPACE 'tests\feasibility\windows_user_entry.ps1
 $arguments=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',('"'+$entry+'"'),
     '-Root',('"'+$env:GITHUB_WORKSPACE+'"'),'-InputPath',('"'+$env:PROBE_INPUT+'"'),
     '-ProfilePath',('"'+$profilePath+'"'),'-ExpectedSid',('"'+$user.SID.Value+'"'),'-ReportPath',('"'+$report+'"'),'-PythonPath',('"'+$python+'"'),'-NodePath',('"'+$node+'"'))
-try{
     $parameters=@{Credential=$credential;LoadUserProfile=$true;WindowStyle='Hidden';
         WorkingDirectory=$shared;ArgumentList=$arguments;PassThru=$true;
         RedirectStandardOutput=(Join-Path $shared 'stdout.txt');RedirectStandardError=(Join-Path $shared 'stderr.txt')}
