@@ -32,6 +32,14 @@ async function check(port, packagePath, sourcePath, replacementPath, statePath, 
 
     installed = true;
     assert.equal(await run((file) => AscDesktopEditor.PluginInstall(file), packagePath), true);
+    const listed = await until(() => run((guid) => {
+      const plugin = DE.getController("Common.Controllers.Plugins").backgroundPlugins?.find(
+        (entry) => entry.get("guid") === guid);
+      if (!plugin) return null;
+      const config = plugin.get("original");
+      return { version: config.version, type: config.variations[0].type };
+    }, GUID), "The form editor did not list the plugin under Background plugins.");
+    assert.deepEqual(listed, { version, type: "background" });
     await run((guid) => {
       if (!Asc.editor.getUsedBackgroundPlugins().includes(guid)) Asc.editor.asc_pluginRun(guid, 0, "");
     }, GUID);
