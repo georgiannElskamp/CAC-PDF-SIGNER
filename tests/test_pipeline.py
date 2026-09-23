@@ -33,6 +33,7 @@ class PipelinePolicyTests(unittest.TestCase):
         self.assertTrue(policy.eligible(pull()))
         for mutate in (lambda p: p['base'].update(ref='main'), lambda p: p.update(draft=True),
                        lambda p: p['user'].update(login='untrusted'), lambda p: p['head'].update(repo=None),
+                       lambda p: p['head'].update(ref='main'), lambda p: p['head'].update(ref='research'),
                        lambda p: p['head'].update(ref='release-verification'), lambda p: p.update(state='closed')):
             value = pull(); mutate(value)
             self.assertFalse(policy.eligible(value))
@@ -95,6 +96,15 @@ class PipelinePolicyTests(unittest.TestCase):
             pipeline.repair(Mock(), {'repairs': 2}, {}, pull(), 'failure')
             request.assert_not_called()
             self.assertEqual(status.call_args.args[1], 'failure')
+
+    def test_policy_change_requires_owner_approval_on_current_commit(self):
+        good = {'user':{'login':policy.OWNER},'state':'APPROVED','commit_id':SHA,'submitted_at':STAMP}
+        with patch.object(pipeline,'pages',return_value=[good]):
+            self.assertTrue(pipeline.owner_approved(pull()))
+        for reviews in ([], [dict(good,commit_id=MAIN)], [dict(good,user={'login':policy.CODEX})],
+                        [good,dict(good,state='DISMISSED',submitted_at='2026-01-02')]):
+            with patch.object(pipeline,'pages',return_value=reviews):
+                self.assertFalse(pipeline.owner_approved(pull()))
 
     def test_main_pr_never_reaches_merge_code(self):
         value = pull(); value['base']['ref'] = 'main'

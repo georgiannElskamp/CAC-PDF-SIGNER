@@ -48,7 +48,7 @@ def policy_changes(pull):
     blocked = []
     for row in sensitive(files):
         path = row["filename"]
-        if (path == ".github/release-candidate.json" and pull["head"]["ref"] == "main"
+        if (path == ".github/release-candidate.json" and pull["head"]["ref"].startswith("automation/sync-release-")
                 and pull["user"]["login"] == APP):
             continue
         if (path.startswith(".github/workflows/") and row["status"] == "modified"
@@ -56,6 +56,13 @@ def policy_changes(pull):
             continue
         blocked.append(path)
     return blocked
+
+
+def owner_approved(pull):
+    reviews = pages(REPO + f"/pulls/{pull['number']}/reviews")
+    current = sorted((r for r in reviews if r["user"]["login"] == OWNER and r["state"] != "COMMENTED"),
+                     key=lambda r: r["submitted_at"])
+    return bool(current and current[-1]["state"] == "APPROVED" and current[-1]["commit_id"] == pull["head"]["sha"])
 
 
 def request_once(state, record, pull, kind, detail=""):
@@ -142,7 +149,7 @@ def process_pull(state, pull, dry_run=False):
     print(f"PR #{number}: CI={ci}; policy-sensitive={bool(blocked)}", flush=True)
     if dry_run:
         return
-    if blocked:
+    if blocked and not owner_approved(pull):
         status(sha, "failure", "Approval or controller policy changed; manual maintenance required")
         return
     if pull.get("mergeable_state") == "behind":
@@ -169,6 +176,7 @@ def process_pull(state, pull, dry_run=False):
         return
     latest = api(REPO + f"/pulls/{number}")
     if (not eligible(latest) or latest["head"]["sha"] != sha or latest["base"]["sha"] != pull["base"]["sha"]
+            or (blocked and not owner_approved(latest))
             or ci_state(latest)[0] != "passed"):
         return
     status(sha, "success", "Fresh Codex review and complete tests passed")
@@ -254,9 +262,12 @@ def promote(state, release_type="auto", dry_run=False):
     # Bring accepted release/version changes back through the research PR gate.
     comparison = api(REPO + f"/compare/{research}...{main}")
     if comparison["ahead_by"]:
-        existing = pages(REPO + "/pulls?state=open&base=research&head=" + OWNER + ":main")
+        sync_branch = "automation/sync-release-" + main[:12]
+        existing = pages(REPO + "/pulls?state=open&base=research&head=" + OWNER + ":" + sync_branch)
         if not existing and not dry_run:
-            api(REPO + "/pulls", "POST", {"head": "main", "base": "research", "title": "Sync accepted release into research",
+            if not optional(REPO + "/git/ref/heads/" + sync_branch):
+                api(REPO + "/git/refs", "POST", {"ref": "refs/heads/" + sync_branch, "sha": main})
+            api(REPO + "/pulls", "POST", {"head": sync_branch, "base": "research", "title": "Sync accepted release into research",
                 "body": "Carry the maintainer-approved release/version changes back into research. No release is published by this PR."})
         return
     if api(REPO + "/git/commits/" + research)["tree"]["sha"] == api(REPO + "/git/commits/" + main)["tree"]["sha"]:
