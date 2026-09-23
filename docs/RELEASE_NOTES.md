@@ -1,12 +1,13 @@
-# Release 0.8.0
+# Release 0.8.1
 
-Released from research commit `83410abc67acc7a6763d504bc35497509eda1de1`.
+Released from research commit `0ae45e36b8237b8625dac46c9b67bd65bf9c2ae6`.
 
-- Complete research controller setup and permanent-branch guards (#14)
+- Sync accepted release into research (#18)
+- Fix publishing and resuming draft releases (#17)
 
-Release **0.8.0** (minor).
+Release **0.8.1** (patch).
 
-Research snapshot: `83410abc67acc7a6763d504bc35497509eda1de1`.
+Research snapshot: `0ae45e36b8237b8625dac46c9b67bd65bf9c2ae6`.
 
 The maintainer approved this release after the final candidate build passed.
 
