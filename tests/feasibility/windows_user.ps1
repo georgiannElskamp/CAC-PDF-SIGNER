@@ -1,14 +1,27 @@
 $ErrorActionPreference='Stop'
 if($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted'){throw 'Disposable hosted runner required'}
-$accountName='CAC Probe Ã©'
+$accountName='CAC Probe ÃƒÂ©'
 $password=[Guid]::NewGuid().ToString('N')+'aA!7'
 $secure=ConvertTo-SecureString $password -AsPlainText -Force
 $password=$null
 $user=New-LocalUser -Name $accountName -Password $secure -PasswordNeverExpires
 $group=Get-LocalGroup -SID 'S-1-5-32-545'
 Add-LocalGroupMember -Group $group -Member $user
+Add-Type -TypeDefinition @"
+using System;
+using System.Text;
+using System.Runtime.InteropServices;
+public static class ProbeProfile {
+  [DllImport("userenv.dll", CharSet=CharSet.Unicode)]
+  public static extern int CreateProfile(string sid, string name, StringBuilder path, uint size);
+}
+"@
+$profileBuffer=[Text.StringBuilder]::new(1024)
+$profileResult=[ProbeProfile]::CreateProfile($user.SID.Value,$accountName,$profileBuffer,1024)
+if($profileResult -ne 0){throw ('Disposable profile creation failed: '+$profileResult)}
+$profilePath=$profileBuffer.ToString()
 $credential=[PSCredential]::new(($env:COMPUTERNAME+'\'+$accountName),$secure)
-$shared=Join-Path $env:RUNNER_TEMP 'CAC feasibility Ã©'
+$shared=Join-Path $env:RUNNER_TEMP 'CAC feasibility ÃƒÂ©'
 New-Item -ItemType Directory -Path $shared -Force | Out-Null
 $report=Join-Path $shared 'report'
 New-Item -ItemType Directory -Path $report -Force | Out-Null
@@ -25,7 +38,7 @@ $node=(Get-Command node).Source
 $entry=Join-Path $env:GITHUB_WORKSPACE 'tests\feasibility\windows_user_entry.ps1'
 $arguments=@('-NoProfile','-NonInteractive','-ExecutionPolicy','Bypass','-File',('"'+$entry+'"'),
     '-Root',('"'+$env:GITHUB_WORKSPACE+'"'),'-InputPath',('"'+$env:PROBE_INPUT+'"'),
-    '-ReportPath',('"'+$report+'"'),'-PythonPath',('"'+$python+'"'),'-NodePath',('"'+$node+'"'))
+    '-ProfilePath',('"'+$profilePath+'"'),'-ExpectedSid',('"'+$user.SID.Value+'"'),'-ReportPath',('"'+$report+'"'),'-PythonPath',('"'+$python+'"'),'-NodePath',('"'+$node+'"'))
 try{
     $parameters=@{Credential=$credential;LoadUserProfile=$true;WindowStyle='Hidden';
         WorkingDirectory=$shared;ArgumentList=$arguments;PassThru=$true;
