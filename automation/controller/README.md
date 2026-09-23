@@ -1,19 +1,28 @@
-# CAC PDF Signer scheduler
+# CAC PDF Signer maintenance controller
 
-Private GitHub-hosted release discovery and health checks. All editor tests and builds run in the public [plugin repository](https://github.com/georgiannElskamp/CAC-PDF-SIGNER).
+Runs discovery, bounded Codex review/repair and research-to-release promotion on GitHub-hosted runners. Heavy tests run in the public [plugin repository](https://github.com/georgiannElskamp/CAC-PDF-SIGNER). Nothing runs on a personal computer.
 
-## Setup
+## Credentials and controls
 
-1. Create an owner-only GitHub App with **Actions: read and write**, webhooks disabled, and no other requested permissions. Install it only on `CAC-PDF-SIGNER`.
-2. In this repository's Actions variables, set `APP_ID` to the App ID.
-3. Generate an App private key and store its complete contents as the Actions secret `APP_PRIVATE_KEY`. Do not commit the key.
-4. Set the Actions variable `AUTOMATION_ENABLED` to `true`.
-5. Run **Discovery** manually, then **Scheduler health** after discovery and compatibility tests finish.
+Install the maintenance GitHub App only on the public plugin repository. It needs Actions, Contents, Pull requests, Commit statuses and Workflows read/write permissions; Metadata read is implicit. Disable webhooks. After changing requested permissions, accept the installation update too.
 
-Discovery runs daily at 08:23 UTC and dispatches the native component watch weekly. Health runs at 11:41 UTC. GitHub schedules are best effort. State is stored on the `state` branch. The scheduler processes up to three unseen releases per poll and rechecks successful combinations after seven days. Failed tests require review; they are not repeatedly retried.
+Private Actions configuration:
 
-Use **Discovery > Run workflow > Retest completed combinations** after resolving a failure. An ambiguous dispatch is preserved for reconciliation. Check its run before removing an unresolved record from `state.json`.
+| Setting | Kind | Purpose |
+| --- | --- | --- |
+| `APP_ID` | Variable | Numeric GitHub App ID |
+| `APP_PRIVATE_KEY` | Secret | App authentication; never copy into source |
+| `CODEX_TRIGGER_TOKEN` | Secret | Separately supplied linked-account GitHub token for Codex comments |
+| `AUTOMATION_ENABLED` | Variable | `true` enables daily editor discovery |
+| `PIPELINE_ENABLED` | Variable | `true` enables scheduled research processing/promotion |
+| `HARNESS_BRANCH` | Variable | `research` after migration; defaults to `main` |
 
-No desktop agent, self-hosted runner, webhook server or connection to a personal computer is used. The scheduler uses private-repository Actions minutes; heavy tests use standard public-repository runners. Optional AI diagnosis is configured separately in the public repository.
+Start with the pipeline disabled. Run **Research and release controller** manually with dry-run enabled. After permissions, branch protections and a controlled research PR pass, enable scheduled processing. Dry-run posts no requests and writes no state. Manual runs can select one PR or propose a version increment.
 
-Workflow templates and scheduler tests are maintained in the public repository's `automation/controller/` directory. Copy reviewed changes here; never copy secrets back into source.
+The controller runs at minutes 17 and 47 each hour; discovery runs daily at 08:23 UTC and health at 11:41 UTC. Scheduling is best effort. Separate files on the private `state` branch record discovery and PR/candidate progress. Requests with uncertain acknowledgements require reconciliation, not blind retries. Two Codex correction requests per PR are allowed; stalled requests require maintainer attention after six hours.
+
+Only eligible research PRs can merge automatically. Controller/approval/release-policy changes require manual maintenance. A versioned candidate is frozen on `release-verification`; its App-authored PR always waits for the owner's approval and manual merge into `main`. No controller path merges main. See the public [operation guide](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/blob/research/docs/AUTOMATION.md) for required checks and coverage limits.
+
+Use **Discovery > Retest completed combinations** only after investigating a failure. An approved editor control distinguishes environment/harness failures from new upstream behavior. Health detects stale discovery but cannot independently detect an outage of all GitHub scheduling.
+
+Reviewed source templates live in `automation/controller/` in the public repository. Copy its Python modules and README to this repository's root and its workflow templates to `.github/workflows/`. No public PR code is executed in this repository with credentials. Changes here are not deployed automatically from public PRs.
