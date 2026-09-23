@@ -118,6 +118,36 @@ class StandaloneRecoveryTests(unittest.TestCase):
                 session.sign(self.request)
             card.assert_not_called()
 
+    def test_onlyoffice_form_reads_saved_path_without_encoded_pdf(self):
+        request = {
+            "op": "sign", "kind": "onlyoffice-form", "field": "Signature1",
+            "sourcePath": str(self.original), "name": self.original.name,
+            "expectedSourceHash": hashlib.sha256(self.original.read_bytes()).hexdigest(),
+        }
+        signer = object()
+        with patch("platform_card.card_signer", return_value=nullcontext(signer)) as card, \
+             patch("signing.sign_bytes", return_value=self.content) as sign:
+            _, metadata, recovered = self.session.sign(request)
+        self.assertFalse(recovered)
+        card.assert_called_once()
+        sign.assert_called_once_with(self.original.read_bytes(), signer, {
+            "field": "Signature1", "kind": "onlyoffice-form",
+        })
+        self.assertEqual(metadata["source"], str(self.original))
+        with patch("platform_card.card_signer") as card:
+            with self.assertRaisesRegex(ValueError, "saved local PDF"):
+                self.session.sign({**request, "sourcePath": "form.pdf"})
+            card.assert_not_called()
+        with patch("platform_card.card_signer") as card:
+            with self.assertRaisesRegex(ValueError, "Reopen the PDF form"):
+                self.session.sign({**request, "expectedSourceHash": ""})
+            card.assert_not_called()
+        self.original.write_bytes(b"%PDF-changed after opening")
+        with patch("platform_card.card_signer") as card:
+            with self.assertRaisesRegex(ValueError, "changed after opening"):
+                self.session.sign(request)
+            card.assert_not_called()
+
     def test_desktop_failure_is_rejected_before_card_access(self):
         self.desktop.side_effect = RuntimeError("Desktop is unavailable")
         with patch("standalone_worker.signing_lock", return_value=nullcontext()), patch("platform_card.card_signer") as card:
