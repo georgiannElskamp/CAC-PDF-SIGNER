@@ -82,7 +82,7 @@ window.CACDesktop = function (host) {
     }
     function recoveryFile(directory, name) {
       const base = new URL(directory.endsWith("/") ? directory : directory + "/");
-      return filePath(new URL(name, base));
+      return filePath(new URL(encodeURIComponent(name), base));
     }
     function load(path) {
       return new Promise((resolve, reject) => {

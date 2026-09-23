@@ -2,7 +2,9 @@
 
 import base64
 import hashlib
+import os
 import tempfile
+import time
 import unittest
 import sys
 from contextlib import nullcontext
@@ -131,6 +133,7 @@ class StandaloneRecoveryTests(unittest.TestCase):
         with patch("platform_card.card_signer") as card:
             result = self.session.prepare_form(request)
             card.assert_not_called()
+
         prepared_path = Path(result["path"])
         prepared = prepared_path.read_bytes()
         self.assertEqual(result["sha256"], hashlib.sha256(prepared).hexdigest())
@@ -168,6 +171,24 @@ class StandaloneRecoveryTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "handoff is missing"):
                 self.session.sign(signing_request)
             card.assert_not_called()
+
+    def test_prune_removes_old_orphan_review_without_touching_other_files(self):
+        self.session.prepared.mkdir()
+        old = time.time() - 31 * 24 * 60 * 60
+        orphan = self.session.prepared / ("CAC-review-" + "a" * 32 + ".pdf")
+        orphan.write_bytes(b"%PDF-orphan")
+        os.utime(orphan, (old, old))
+        current = self.session.prepared / ("CAC-review-" + "b" * 32 + ".pdf")
+        current.write_bytes(b"%PDF-current")
+        unrelated = self.session.prepared / "notes.pdf"
+        unrelated.write_bytes(b"unrelated")
+        os.utime(unrelated, (old, old))
+
+        self.session.prune_prepared()
+
+        self.assertFalse(orphan.exists())
+        self.assertTrue(current.exists())
+        self.assertTrue(unrelated.exists())
 
     def test_desktop_failure_is_rejected_before_card_access(self):
         self.desktop.side_effect = RuntimeError("Desktop is unavailable")

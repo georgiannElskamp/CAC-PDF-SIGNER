@@ -125,11 +125,12 @@ async function formAdapterTest(version) {
   const dialog = { show() { shown.push("native"); } };
   const originalShow = dialog.show;
   let modified = false, preview = true, sourcePath = "C:\\Test User é%\\form.pdf";
+  let documentName = "form.pdf";
   const api = {
     asc_getPdfProps: vm.runInNewContext("(function(){return null})"),
     GetVersion: () => version,
     isDocumentModified: () => modified,
-    asc_getDocumentName: () => "form.pdf",
+    asc_getDocumentName: () => documentName,
     pluginMethod_IsFillingFormMode: () => preview,
     pluginMethod_GetAllForms: () => [{ InternalId: "1603", FormKey: "Signature1", FormValue: "" }],
     asc_registerCallback: (name, fn) => { callbacks[name] = fn; },
@@ -143,7 +144,7 @@ async function formAdapterTest(version) {
       loadLocalFile(path, callback) {
         reads.push(path);
         callback(Buffer.from(path.endsWith("asc_name.info")
-          ? '<info type="87" name="form.pdf" />' : "%PDF-1.7 recovery"));
+          ? `<info type="87" name="${documentName}" />` : "%PDF-1.7 recovery"));
       },
     },
     Common: { Views: { PdfSignDialog: function () {} } },
@@ -178,6 +179,15 @@ async function formAdapterTest(version) {
     "C:\\Test User é%\\recover\\DE_123\\asc_name.info",
     "C:\\Test User é%\\recover\\DE_123\\form.pdf",
   ]);
+  for (const name of ["form#1?.pdf", "..%2Foutside.pdf", "..%5Coutside.pdf"]) {
+    documentName = name;
+    sourcePath = `C:\\Test User é%\\${name}`;
+    const next = await adapter.snapshot("Signature1");
+    assert.equal(next.name, name);
+    assert.equal(reads.at(-1), `C:\\Test User é%\\recover\\DE_123\\${name}`);
+  }
+  documentName = "form.pdf";
+  sourcePath = snapshot.sourcePath;
   const action = { type: 12, pr: {
     get_InternalId: () => "1603",
     get_FormPr: () => ({ get_Key: () => "Signature1" }),

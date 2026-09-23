@@ -37,7 +37,7 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
       - name: Test installation in approved editor
         run: |
-          command=(python -B tests/editor_ci.py "$RUNNER_TEMP/input/CAC-PDF-Signer.plugin")
+          command=(python -B tests/editor_ci.py "$RUNNER_TEMP/input/CAC-PDF-Signer.plugin" --form-handoff)
           if [[ "$RUNNER_OS" == Linux ]]; then xvfb-run -a "${command[@]}"; else "${command[@]}"; fi
   signing:
     runs-on: ubuntu-24.04

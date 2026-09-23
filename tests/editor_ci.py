@@ -66,9 +66,7 @@ def stop_windows_editor(directory):
             _winapi.CloseHandle(handle)
 
 
-def check(package, manifest=None, plugin_version=None):
-    from check_form_handoff import verify as verify_form_handoff
-
+def check(package, manifest=None, plugin_version=None, form_handoff=False):
     if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted":
         raise RuntimeError("This installer is restricted to disposable GitHub-hosted runners.")
     if sys.platform not in ("win32", "linux") or platform.machine().lower() not in ("amd64", "x86_64"):
@@ -139,13 +137,16 @@ def check(package, manifest=None, plugin_version=None):
                         child.wait(timeout=10)
 
         run_session(pdf, 9251, "tests/editor_smoke.js", [str(package.resolve()), version, pdf.name], "standard")
-        form = work / "Example User é" / "form source.pdf"
-        form.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(root / "tests/fixtures/onlyoffice-form.pdf", form)
-        report = run_session(form, 9252, "tests/form_editor_smoke.js",
-                             [str(package.resolve()), str(form), str(pdf), str(state), version], "form")
-        result = next(json.loads(line) for line in report.splitlines() if line.startswith('{'))
-        verify_form_handoff(result["recoveryPath"], result["prepared"], result["comparisonPath"])
+        if form_handoff or tuple(map(int, version.split("."))) >= (0, 9, 0):
+            from check_form_handoff import verify as verify_form_handoff
+
+            form = work / "Example User é" / "form source.pdf"
+            form.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(root / "tests/fixtures/onlyoffice-form.pdf", form)
+            report = run_session(form, 9252, "tests/form_editor_smoke.js",
+                                 [str(package.resolve()), str(form), str(pdf), str(state), version], "form")
+            result = next(json.loads(line) for line in report.splitlines() if line.startswith('{'))
+            verify_form_handoff(result["recoveryPath"], result["prepared"], result["comparisonPath"])
 
 
 if __name__ == "__main__":
@@ -153,5 +154,6 @@ if __name__ == "__main__":
     parser.add_argument("package", type=Path)
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--plugin-version")
+    parser.add_argument("--form-handoff", action="store_true")
     args = parser.parse_args()
-    check(args.package, args.manifest, args.plugin_version)
+    check(args.package, args.manifest, args.plugin_version, args.form_handoff)

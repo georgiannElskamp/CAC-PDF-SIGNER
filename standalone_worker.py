@@ -105,7 +105,9 @@ class SigningSession:
         if not self.prepared.is_dir():
             return
         cutoff = time.time() - PREPARED_AGE
-        for record in self.prepared.glob("*.json"):
+        for record in self.prepared.glob("CAC-review-*.json"):
+            if not re.fullmatch(r"CAC-review-[0-9a-f]{32}\.json", record.name):
+                continue
             try:
                 if record.stat().st_mtime >= cutoff:
                     continue
@@ -114,6 +116,14 @@ class SigningSession:
                     continue
                 pdf.unlink(missing_ok=True)
                 record.unlink()
+            except OSError:
+                pass
+        for pdf in self.prepared.glob("CAC-review-*.pdf"):
+            if not re.fullmatch(r"CAC-review-[0-9a-f]{32}\.pdf", pdf.name):
+                continue
+            try:
+                if not pdf.with_suffix(".json").exists() and pdf.stat().st_mtime < cutoff:
+                    pdf.unlink()
             except OSError:
                 pass
 
