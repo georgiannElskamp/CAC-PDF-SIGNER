@@ -35,7 +35,7 @@ Turn the background plugin off before updating or removing it; reopen the PDF af
 - Checks signature integrity. Certificate trust, revocation and trusted timestamping are outside its scope.
 - Leaves recovery copies in the user's application-data directory after uninstalling. Treat them as confidential documents.
 
-The `research` branch also recognizes signature boxes in saved ONLYOFFICE PDF forms. In Preview mode, clicking an empty box creates a signed PDF copy with the same visible certificate text. This change is not in the linked release yet. The signed copy is a standard PDF; ONLYOFFICE's editable form package is not retained.
+Builds with ONLYOFFICE form support also recognize signature boxes in saved PDF forms. In Preview mode, clicking an empty box creates a signed PDF copy with the same visible certificate text. The signed copy is a standard PDF; ONLYOFFICE's editable form package is not retained. Check the installed version's release notes for feature availability.
 
 ## Development
 

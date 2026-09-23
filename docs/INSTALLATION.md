@@ -31,7 +31,7 @@ Keep Windows plugin installation paths below 260 characters. Spaces, Unicode and
 
 Save and reopen the PDF, then click an empty signature field. Enter the CAC PIN when prompted and choose a location in **Save signed PDF as**. The signed copy opens in ONLYOFFICE.
 
-The unreleased `research` branch also handles signature boxes created in ONLYOFFICE PDF forms: save and reopen the form, select **Forms > Preview**, then click the empty box. The saved signed copy is a standard PDF and no longer contains ONLYOFFICE's editable form package. The release linked above does not include this support.
+Builds with ONLYOFFICE form support also handle signature boxes created in ONLYOFFICE PDF forms: save and reopen the form, select **Forms > Preview**, then click the empty box. The saved signed copy is a standard PDF and no longer contains ONLYOFFICE's editable form package. Version 0.8.0 does not include this support; check the installed version's release notes.
 
 The visible signature displays the certificate name, signing time, and rank and DoD ID when available. Text wraps and scales to the field dimensions. The card performs the private-key operation.
 
@@ -55,7 +55,7 @@ These files contain signed documents and identity details. Uninstalling the plug
 | Recovery folder cannot be written | Check permissions and free space before retrying. |
 | PDF must be reopened | Save changes and close/reopen the PDF so the editor loads the saved bytes. |
 
-The published plugin requires an existing PDF signature field. The development branch additionally recognizes saved ONLYOFFICE signature boxes. Both paths reject encrypted PDFs, files over 40 MB, hidden or ambiguous fields, multiple eligible certificates and unsupported certificate-name characters. Bundled fonts cover additional Latin, Greek, Cyrillic and CJK text; other scripts and right-to-left layout are unvalidated.
+Versions without ONLYOFFICE form support require an existing PDF signature field. Builds with this support also recognize saved ONLYOFFICE signature boxes. Both paths reject encrypted PDFs, files over 40 MB, hidden or ambiguous fields, multiple eligible certificates and unsupported certificate-name characters. Bundled fonts cover additional Latin, Greek, Cyrillic and CJK text; other scripts and right-to-left layout are unvalidated.
 
 Verification checks signature integrity. Certificate trust, revocation and trusted timestamping are outside its scope; signing time uses the local clock.
 
