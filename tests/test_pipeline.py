@@ -205,6 +205,58 @@ class ApprovedPublicationTests(unittest.TestCase):
             with self.assertRaises(ValueError): release.publish(Path(folder), proof)
             api.assert_not_called()
 
+    def test_draft_lookup_uses_id_and_rejects_duplicate_tags(self):
+        rows = [{'id': 7, 'tag_name': 'v1.0.0', 'draft': True, 'assets': []}]
+        with patch.object(release, 'pages', return_value=rows), patch.object(release, 'api', return_value={'id': 7}) as api:
+            self.assertEqual(release.find_release('v1.0.0'), {'id': 7})
+            api.assert_called_once_with(release.REPO + '/releases/7')
+            rows.append(dict(rows[0], id=8))
+            with self.assertRaisesRegex(ValueError, 'Multiple releases'):
+                release.find_release('v1.0.0')
+            self.assertEqual(api.call_count, 1)
+
+    def test_publication_creates_or_resumes_draft_before_publishing(self):
+        proof = {'main': MAIN}
+        for state in ('new', 'partial', 'complete', 'published', 'mismatch', 'renamed'):
+            with self.subTest(state=state), tempfile.TemporaryDirectory() as folder:
+                root = Path(folder); (root / 'docs').mkdir()
+                (root / 'docs/RELEASE_NOTES.md').write_text('Release 1.0.0', encoding='utf-8')
+                for name in release.ASSETS:
+                    (root / name).write_bytes(('synthetic ' + name).encode())
+                assets = [{'name': name, 'digest': 'sha256:' + release.sha256(root / name)} for name in release.ASSETS]
+                draft = {'id': 7, 'tag_name': 'v1.0.0', 'draft': state != 'published', 'assets': copy.deepcopy(assets)}
+                if state in ('new', 'partial'): draft['assets'] = assets[:0 if state == 'new' else 2]
+                if state == 'mismatch': draft['assets'][0]['digest'] = 'sha256:' + '0' * 64
+                rows = [] if state == 'new' else [{'id': 7, 'tag_name': 'v1.0.0', 'assets': []}]
+                uploaded = {**draft, 'assets': assets}
+                if state == 'renamed': uploaded['tag_name'] = 'v2.0.0'
+                reads = 0
+                def api(path, method='GET', body=None):
+                    nonlocal reads
+                    if path == release.REPO + '/releases' and method == 'POST':
+                        self.assertTrue(body['draft'])
+                        return draft
+                    if path == release.REPO + '/releases/7':
+                        if method == 'PATCH':
+                            self.assertEqual(body, {'draft': False, 'prerelease': False, 'make_latest': 'true'})
+                            return {**uploaded, 'draft': False}
+                        reads += 1
+                        return draft if reads == 1 and state != 'new' else uploaded
+                    self.fail('Unexpected release endpoint: ' + path)
+                with patch.object(release, 'ROOT', root), patch.object(release, 'inspect', return_value=proof), patch.object(release, 'validate_package', return_value={'tag': 'v1.0.0'}), patch.object(release, 'optional', return_value={'object': {'type': 'commit', 'sha': MAIN}}), patch.object(release, 'pages', return_value=rows), patch.object(release, 'api', side_effect=api) as requests, patch.object(release.subprocess, 'run') as upload:
+                    if state in ('mismatch', 'renamed'):
+                        with self.assertRaises(ValueError): release.publish(root, proof)
+                    else:
+                        release.publish(root, proof)
+                    mutations = [(c.args[0], c.args[1]) for c in requests.call_args_list if len(c.args) > 1]
+                    self.assertEqual(sum(method == 'POST' for _, method in mutations), int(state == 'new'))
+                    self.assertEqual(sum(method == 'PATCH' for _, method in mutations), int(state in ('new', 'partial', 'complete')))
+                    if state in ('new', 'partial'):
+                        expected = [str(root / name) for name in release.ASSETS[0 if state == 'new' else 2:]]
+                        upload.assert_called_once_with(['gh', 'release', 'upload', 'v1.0.0', '--repo', policy.PUBLIC, *expected], check=True)
+                    else:
+                        upload.assert_not_called()
+
     def test_substituted_metadata_fails_before_package_audit(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder); (root / 'plugin').mkdir(); (root / '.github').mkdir()

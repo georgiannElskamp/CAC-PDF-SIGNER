@@ -95,6 +95,14 @@ def validate_package(directory, proof):
     return evidence
 
 
+def find_release(tag):
+    # The tag endpoint excludes drafts; fetch matching releases by ID.
+    matches = [item for item in pages(REPO + "/releases") if item["tag_name"] == tag]
+    if len(matches) > 1:
+        raise ValueError("Multiple releases identify this tag; inspect before resuming")
+    return api(REPO + f"/releases/{matches[0]['id']}") if matches else None
+
+
 def publish(directory, proof):
     if inspect(proof["main"]) != proof:
         raise ValueError("Release evidence changed during publication")
@@ -105,10 +113,12 @@ def publish(directory, proof):
         raise ValueError("Existing tag does not identify this approved main commit")
     if not ref:
         api(REPO + "/git/refs", "POST", {"ref": "refs/tags/" + tag, "sha": proof["main"]})
-    release = optional(REPO + "/releases/tags/" + tag)
+    release = find_release(tag)
     if not release:
         release = api(REPO + "/releases", "POST", {"tag_name": tag, "name": "CAC PDF Signer " + tag[1:],
             "draft": True, "prerelease": False, "body": (ROOT / "docs/RELEASE_NOTES.md").read_text(encoding="utf-8")})
+    if release["tag_name"] != tag:
+        raise ValueError("Release tag changed during publication")
     existing = {a["name"]: a.get("digest") for a in release["assets"]}
     missing = []
     for name in ASSETS:
@@ -120,7 +130,9 @@ def publish(directory, proof):
         if not release["draft"]:
             raise ValueError("Published release is incomplete; refusing to alter it")
         subprocess.run(["gh", "release", "upload", tag, "--repo", PUBLIC, *missing], check=True)
-    uploaded = api(REPO + "/releases/tags/" + tag)
+    uploaded = api(REPO + f"/releases/{release['id']}")
+    if uploaded["tag_name"] != tag:
+        raise ValueError("Release tag changed during publication")
     digests = {a["name"]: a.get("digest") for a in uploaded["assets"]}
     if any(digests.get(name) != "sha256:" + sha256(directory / name) for name in ASSETS):
         raise ValueError("Uploaded asset verification failed")
