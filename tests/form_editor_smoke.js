@@ -114,8 +114,12 @@ async function check(port, packagePath, sourcePath, replacementPath, statePath, 
         .map((field) => ({ name: field.name, signed: !!field.Sig }))),
     "The review PDF did not expose a standard signature field.");
     assert.deepEqual(visible, [{ name: "Signature1_af_image", signed: false }]);
-    assert.equal(await review.run(() => AscDesktopEditor.LocalFileGetSourcePath().replace(/\\/g, "/")),
-      prepared.replace(/\\/g, "/"));
+    const openedPath = await review.run(() => AscDesktopEditor.LocalFileGetSourcePath());
+    const openedFile = fs.statSync(openedPath, { bigint: true });
+    const preparedFile = fs.statSync(prepared, { bigint: true });
+    assert.equal(openedFile.dev, preparedFile.dev);
+    assert.equal(openedFile.ino, preparedFile.ino);
+    assert.equal(sha256(fs.readFileSync(openedPath)), metadata.sha256);
     assert.equal(await run(() => Asc.editor.pluginMethod_GetAllForms()[0].FormValue), "");
     assert.equal(sha256(fs.readFileSync(recoveryPath)), loadedHash);
     fs.mkdirSync(statePath, { recursive: true });

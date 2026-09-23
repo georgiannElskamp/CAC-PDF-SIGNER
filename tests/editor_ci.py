@@ -13,7 +13,6 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from automation import download, validate_manifest
-from check_form_handoff import verify as verify_form_handoff
 
 
 def stop_windows_editor(directory):
@@ -68,6 +67,8 @@ def stop_windows_editor(directory):
 
 
 def check(package, manifest=None, plugin_version=None):
+    from check_form_handoff import verify as verify_form_handoff
+
     if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted":
         raise RuntimeError("This installer is restricted to disposable GitHub-hosted runners.")
     if sys.platform not in ("win32", "linux") or platform.machine().lower() not in ("amd64", "x86_64"):
@@ -139,7 +140,7 @@ def check(package, manifest=None, plugin_version=None):
 
         run_session(pdf, 9251, "tests/editor_smoke.js", [str(package.resolve()), version, pdf.name], "standard")
         form = work / "Example User é" / "form source.pdf"
-        form.parent.mkdir(parents=True)
+        form.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(root / "tests/fixtures/onlyoffice-form.pdf", form)
         report = run_session(form, 9252, "tests/form_editor_smoke.js",
                              [str(package.resolve()), str(form), str(pdf), str(state), version], "form")
