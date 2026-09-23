@@ -36,13 +36,15 @@
     lastError = "";
     try {
       const source = adapter.snapshot(field);
-      const result = await client.call({
+      const request = {
         op: "sign",
         field,
-        pdf: base64(source.bytes),
         name: source.name,
         sourcePath: source.sourcePath,
-      });
+      };
+      if (source.kind === "onlyoffice-form") request.kind = source.kind;
+      else request.pdf = base64(source.bytes);
+      const result = await client.call(request);
       if (result.cancelled) return;
       if (!result.saved || !result.integrityVerified)
         throw new Error("The signed copy could not be verified and saved.");
@@ -69,7 +71,6 @@
     }
   }
   Asc.plugin.init = async function () {
-    // PDF form creation uses the document editor; signing starts after reopening the saved PDF.
     const info = Asc.plugin.info || {};
     if (info.editorType && info.editorType !== "pdf" && info.editorSubType !== "pdf") return;
     if (initialized || disposed) return;

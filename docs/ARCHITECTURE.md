@@ -6,10 +6,12 @@ The `.plugin` archive contains the background JavaScript, Windows and Linux work
 
 1. The background script checks the editor adapter and runs desktop and recovery-storage preflight before attaching to PDF signature fields.
 2. A hidden `onlyoffice:` frame launches the worker through ONLYOFFICE's `ExternalProcess` API. Windows uses `native/cac-signer.exe`; Linux uses `launch-linux.sh` and `native/linux-x86_64/cac-signer`.
-3. The frames validate message origins. PDF bytes and the field name travel over standard input; the worker returns JSON events over standard output.
+3. The frames validate message origins. Standard PDF signature fields send PDF bytes and the field name to the worker. A saved ONLYOFFICE form sends its local path and form key; the worker reads the file before accessing the card. The worker returns JSON events over standard output.
 4. Windows signs through the CNG bridge or CryptoAPI for legacy CSP keys. Linux uses python-pkcs11 and OpenSC. A Windows mutex or Linux file lock serializes signing and Save As across editor tabs.
 5. The worker verifies the signed PDF, writes a recovery copy and opens a native Save As dialog. Cancelling preserves the completed signature for a later save attempt.
 6. The plugin acknowledges the result before the worker exits, avoiding the editor's process-output shutdown race. The acknowledgment wait is limited to ten seconds. After saving, the plugin opens the result through the editor's native file opener.
+
+ONLYOFFICE PDF form signature boxes export as image buttons rather than PDF `/Sig` fields. In Preview mode, the adapter recognizes the selected form control and intercepts its image-signature dialog. The worker copies the standard PDF objects, converts that button into a `/Sig` field at the same rectangle, and signs the resulting PDF. This removes the embedded editable form package from the signed copy. Existing signed forms are rejected because copying them would invalidate their signatures.
 
 ## Platform integration
 

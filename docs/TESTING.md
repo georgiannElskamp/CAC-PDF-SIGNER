@@ -28,6 +28,8 @@ The rendered certificate text was inspected using synthetic identity `EXAMPLE.TE
 
 Version 0.7.0-rc.6 was accepted for release on 2026-09-22. Its artifact and version label are unchanged from the tested candidate. It retains the rc.2 signing code and corrects draft-asset access, Linux editor launch and Windows test-process cleanup in the release workflow.
 
+The `research` branch has unreleased ONLYOFFICE form-box support. A saved form made by ONLYOFFICE 9.4.0.129 was inspected without changing the original. The Preview-mode click adapter was exercised in a disposable editor profile. A copy of the form was signed with an in-memory synthetic certificate and reopened with the visible appearance in the same rectangle; pyHanko verified its cryptographic integrity. This does not establish physical CAC behavior, Linux editor behavior, or preservation of every kind of multi-field ONLYOFFICE form. A rebuilt Windows/Linux `.plugin` and hosted qualification are required before release.
+
 | Check | Result |
 | --- | --- |
 | Release workflow | Windows/Linux source, packaged-worker and fresh-editor installation checks [passed](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/actions/runs/35749846160). |

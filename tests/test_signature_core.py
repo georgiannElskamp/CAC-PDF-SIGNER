@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import fields, signers
 from pyhanko.sign.validation import validate_pdf_signature
@@ -110,6 +111,65 @@ class SignatureTests(unittest.TestCase):
         self.assertEqual(details["name"], "ALEX EXAMPLE")
         self.assertEqual(details["dodId"], "0000000000")
         self.assertNotIn("Rank:", signature_text(details)[0])
+
+    def test_onlyoffice_form_box_becomes_valid_signature(self):
+        source = io.BytesIO()
+        page = canvas.Canvas(source, pagesize=(612, 792))
+        page.drawString(54, 720, "Synthetic ONLYOFFICE form test")
+        page.save()
+        writer = IncrementalPdfFileWriter(io.BytesIO(source.getvalue()))
+        page_ref, _ = writer.find_page_for_modification(0)
+        action = writer.add_object(generic.DictionaryObject({
+            generic.pdf_name("/S"): generic.pdf_name("/JavaScript"),
+            generic.pdf_name("/JS"): generic.TextStringObject("event.target.buttonImportIcon();"),
+        }))
+        box = generic.DictionaryObject({
+            generic.pdf_name("/Type"): generic.pdf_name("/Annot"),
+            generic.pdf_name("/Subtype"): generic.pdf_name("/Widget"),
+            generic.pdf_name("/FT"): generic.pdf_name("/Btn"),
+            generic.pdf_name("/Ff"): generic.NumberObject(65536),
+            generic.pdf_name("/F"): generic.NumberObject(4),
+            generic.pdf_name("/T"): generic.TextStringObject("Signature1_af_image"),
+            generic.pdf_name("/P"): page_ref,
+            generic.pdf_name("/Rect"): generic.ArrayObject([
+                generic.NumberObject(n) for n in (70, 688, 224, 720)
+            ]),
+            generic.pdf_name("/A"): action,
+        })
+        box_ref = writer.add_object(box)
+        page_obj = page_ref.get_object()
+        page_obj[generic.pdf_name("/Annots")] = generic.ArrayObject([box_ref])
+        writer.update_container(page_obj)
+        writer.root[generic.pdf_name("/AcroForm")] = generic.DictionaryObject({
+            generic.pdf_name("/Fields"): generic.ArrayObject([box_ref]),
+        })
+        writer.update_root()
+        writer.add_object(generic.DictionaryObject({
+            generic.pdf_name("/Type"): generic.pdf_name("/MetaOForm"),
+            generic.pdf_name("/ONLYOFFICEFORM"): generic.ArrayObject([
+                generic.NumberObject(0), generic.NumberObject(0)
+            ]),
+        }))
+        output = io.BytesIO()
+        writer.write(output)
+        pdf = output.getvalue()
+        signed = signing.sign_bytes(pdf, self.signer, {
+            "kind": "onlyoffice-form", "field": "Signature1",
+        })
+        reader = PdfFileReader(io.BytesIO(signed))
+        (signature,) = reader.embedded_signatures
+        status = validate_pdf_signature(signature, signer_validation_context=ValidationContext(
+            trust_roots=[self.cert], allow_fetching=False,
+        ))
+        self.assertTrue(status.intact and status.valid)
+        self.assertEqual(signature.field_name, "Signature1_af_image")
+        self.assertEqual([float(n) for n in signature.sig_field["/Rect"]], [70, 688, 224, 720])
+        self.assertNotIn(b"/MetaOForm", signed)
+        self.assertNotIn("/A", signature.sig_field)
+        with self.assertRaisesRegex(ValueError, "not a saved ONLYOFFICE"):
+            signing.sign_bytes(self.pdf, self.signer, {"kind": "onlyoffice-form", "field": "Signature1"})
+        with self.assertRaisesRegex(ValueError, "missing or ambiguous"):
+            signing.sign_bytes(pdf, self.signer, {"kind": "onlyoffice-form", "field": "Other"})
 
     def test_card_selection_is_mocked(self):
         self.assertIs(

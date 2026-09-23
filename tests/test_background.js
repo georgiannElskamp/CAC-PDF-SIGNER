@@ -119,6 +119,62 @@ function adapterTest() {
   assert.throws(() => context.window.CACDesktop(host), /ONLYOFFICE unknown needs/);
 }
 adapterTest();
+function formAdapterTest() {
+  const callbacks = {}, timers = [], clicks = [], errors = [], shown = [];
+  const dialog = { show() { shown.push("native"); } };
+  const originalShow = dialog.show;
+  let modified = false, preview = true;
+  const api = {
+    asc_getPdfProps: vm.runInNewContext("(function(){return null})"),
+    GetVersion: () => "9.4.0",
+    isDocumentModified: () => modified,
+    asc_getDocumentName: () => "form.pdf",
+    pluginMethod_IsFillingFormMode: () => preview,
+    pluginMethod_GetAllForms: () => [{ InternalId: "1603", FormKey: "Signature1", FormValue: "" }],
+    asc_registerCallback: (name, fn) => { callbacks[name] = fn; },
+    asc_unregisterCallback: (name, fn) => { if (callbacks[name] === fn) delete callbacks[name]; },
+  };
+  const host = {
+    Asc: { editor: api },
+    AscDesktopEditor: { LocalFileGetSourcePath: () => "C:\\Test User\\form.pdf" },
+    Common: { Views: { PdfSignDialog: function () {} } },
+  };
+  host.Common.Views.PdfSignDialog.prototype = dialog;
+  const context = { window: { setTimeout: (fn) => timers.push(fn) } };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(root, "plugin/desktop-adapter.js"), "utf8"), context);
+  const adapter = context.window.CACDesktop(host);
+  adapter.attach((field) => clicks.push(field), (error) => errors.push(error));
+  assert.equal(adapter.snapshot("Signature1").kind, "onlyoffice-form");
+  const action = { type: 12, pr: {
+    get_InternalId: () => "1603",
+    get_FormPr: () => ({ get_Key: () => "Signature1" }),
+  } };
+  dialog.show();
+  callbacks.asc_onShowContentControlsActions(action);
+  timers.shift()();
+  assert.deepEqual(clicks, ["Signature1"]);
+  assert.deepEqual(shown, []);
+  dialog.show();
+  callbacks.asc_onShowContentControlsActions({ type: 4 });
+  timers.shift()();
+  assert.deepEqual(shown, ["native"]);
+  preview = false;
+  dialog.show();
+  callbacks.asc_onShowContentControlsActions(action);
+  timers.shift()();
+  assert.deepEqual(shown, ["native", "native"]);
+  modified = true;
+  assert.throws(() => adapter.snapshot("Signature1"), /reopen/);
+  callbacks.asc_onDocumentModifiedChanged();
+  modified = false;
+  assert.throws(() => adapter.snapshot("Signature1"), /reopen/);
+  assert.equal(errors.length, 0);
+  adapter.detach();
+  assert.equal(dialog.show, originalShow);
+  assert.equal(callbacks.asc_onShowContentControlsActions, undefined);
+}
+formAdapterTest();
 async function startupTest(fail, unload) {
   const events = [], handlers = {};
   let resolve, reject;
@@ -143,5 +199,5 @@ async function startupTest(fail, unload) {
   assert.deepEqual(events, unload ? ["preflight", "detach", "close"] : ["preflight", fail ? "error" : "attach"]);
 }
 Promise.all([startupTest(false, false), startupTest(true, false), startupTest(false, true)])
-  .then(() => console.log("PASS: fields, unsaved edits, version guard, startup preflight and cleanup"))
+  .then(() => console.log("PASS: PDF and ONLYOFFICE form clicks, unsaved edits, version guard, startup and cleanup"))
   .catch(error => { console.error(error); process.exitCode = 1; });

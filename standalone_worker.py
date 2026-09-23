@@ -146,7 +146,25 @@ class SigningSession:
         from platform_card import card_signer
         from signing import sign_bytes
 
-        pdf = base64.b64decode(request["pdf"], validate=True)
+        kind = request.get("kind", "pdf-signature")
+        if kind == "onlyoffice-form":
+            source = request.get("sourcePath")
+            if not isinstance(source, str) or not source:
+                raise ValueError("Save and reopen the ONLYOFFICE PDF form before signing.")
+            source_path = Path(source)
+            if not source_path.is_absolute() or source_path.suffix.lower() != ".pdf":
+                raise ValueError("A saved local PDF form is required.")
+            if source_path.stat().st_size > MAX_PDF:
+                raise ValueError("Choose a PDF smaller than 40 MB.")
+            before = source_path.stat()
+            pdf = source_path.read_bytes()
+            after = source_path.stat()
+            if (before.st_mtime_ns, before.st_size) != (after.st_mtime_ns, after.st_size):
+                raise ValueError("The PDF changed while it was being read. Reopen it and retry.")
+        elif kind == "pdf-signature":
+            pdf = base64.b64decode(request["pdf"], validate=True)
+        else:
+            raise ValueError("Unsupported signing request.")
         if len(pdf) > MAX_PDF or not pdf.startswith(b"%PDF-"):
             raise ValueError("Choose a PDF smaller than 40 MB.")
         field = request.get("field")
@@ -158,7 +176,7 @@ class SigningSession:
         if pending:
             return (*pending, True)
         with card_signer(self.bridge) as signer:
-            signed = sign_bytes(pdf, signer, {"field": field})
+            signed = sign_bytes(pdf, signer, {"field": field, "kind": kind})
         name = re.sub(
             r"[^a-zA-Z0-9_. -]", "_", str(request.get("name", "document.pdf"))
         )[:120]
