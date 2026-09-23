@@ -1,0 +1,182 @@
+name: Release test feasibility
+on:
+  push:
+    branches: [test/release-verification-feasibility]
+    paths: ['tests/feasibility/**', '.github/workflows/feasibility.yml']
+permissions:
+  contents: read
+  actions: read
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+  PROBE_REPORT: ${{ github.workspace }}/../probe-report
+  PROBE_INPUT: ${{ github.workspace }}/../probe-input
+jobs:
+  core:
+    if: contains(github.event.head_commit.message, '[probe:all]') || contains(github.event.head_commit.message, '[probe:core]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with: {python-version: '3.11'}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with: {node-version: '22'}
+      - run: python -m pip install -r requirements-dev.txt
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: Check bounded lifecycle orderings and known defects
+        id: lifecycle
+        continue-on-error: true
+        run: node tests/feasibility/lifecycle.js
+      - name: Check synthetic PDF corpus and render controls
+        id: pdf
+        continue-on-error: true
+        run: python -B tests/feasibility/pdf_corpus.py
+      - name: Check evidence policy failure controls
+        id: gate
+        continue-on-error: true
+        run: python -B tests/feasibility/gate.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: feasibility-core
+          path: ${{ env.PROBE_REPORT }}
+          retention-days: 30
+          if-no-files-found: error
+      - name: Preserve any failed probe outcome
+        if: always()
+        env:
+          LIFECYCLE: ${{ steps.lifecycle.outcome }}
+          PDF: ${{ steps.pdf.outcome }}
+          GATE: ${{ steps.gate.outcome }}
+        run: test "$LIFECYCLE" = success && test "$PDF" = success && test "$GATE" = success
+  windows:
+    if: contains(github.event.head_commit.message, '[probe:all]') || contains(github.event.head_commit.message, '[probe:windows]')
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with: {python-version: '3.11'}
+      - run: python -m pip install -r requirements-dev.txt
+      - name: Retrieve the unchanged tested candidate
+        env: {GH_TOKEN: '${{ github.token }}'}
+        run: python -B tests/feasibility/common.py
+      - name: Exercise real CNG and independent PDF verification
+        run: python -B tests/feasibility/windows_cng.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: feasibility-windows-cng
+          path: ${{ env.PROBE_REPORT }}
+          retention-days: 30
+          if-no-files-found: error
+  desktop:
+    if: contains(github.event.head_commit.message, '[probe:all]') || contains(github.event.head_commit.message, '[probe:desktop]')
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2025, ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with: {python-version: '3.11'}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with: {node-version: '22'}
+      - name: Retrieve the unchanged tested candidate
+        env: {GH_TOKEN: '${{ github.token }}'}
+        run: python -B tests/feasibility/common.py
+      - name: Prepare Linux display
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth libgbm1
+      - name: Test Linux UI enablement, repeated workers and restart
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -B tests/feasibility/desktop.py
+      - name: Install the Windows editor
+        if: runner.os == 'Windows'
+        run: python -B tests/feasibility/desktop.py --install-only
+      - name: Test Windows from a real standard-user account
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: ./tests/feasibility/windows_user.ps1
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: feasibility-desktop-${{ matrix.os }}
+          path: ${{ env.PROBE_REPORT }}
+          retention-days: 30
+          if-no-files-found: error
+  virtual:
+    if: contains(github.event.head_commit.message, '[probe:all]') || contains(github.event.head_commit.message, '[probe:virtual]')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with: {python-version: '3.11'}
+      - name: Retrieve the unchanged tested candidate
+        env: {GH_TOKEN: '${{ github.token }}'}
+        run: python -B tests/feasibility/common.py
+      - name: Build virtual CAC test environment
+        run: docker build --pull -f tests/feasibility/virtual/Dockerfile -t cac-virtual-feasibility .
+      - name: Exercise bundled OpenSC with virtual card removal and reinsertion
+        run: |
+          docker run --rm --shm-size=1g -e GITHUB_ACTIONS=true -e RUNNER_ENVIRONMENT=github-hosted \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/repo,readonly" \
+            --mount "type=bind,src=$PROBE_INPUT,dst=/input,readonly" \
+            --mount "type=bind,src=$PROBE_REPORT,dst=/evidence" cac-virtual-feasibility
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: feasibility-virtual
+          path: ${{ env.PROBE_REPORT }}
+          retention-days: 30
+          if-no-files-found: error
+  evidence:
+    if: always() && !cancelled()
+    needs: [core, windows, desktop, virtual]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: feasibility-*
+          path: ${{ runner.temp }}/evidence
+      - name: Record all outcomes
+        env:
+          PROBE_JOBS: ${{ toJSON(needs) }}
+        run: python -B tests/feasibility/collect.py "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/feasibility-evidence.json"
+      - name: Attest this feasibility report
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
+        with:
+          subject-path: ${{ runner.temp }}/feasibility-evidence.json
+      - name: Verify evidence origin and reject altered bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh attestation verify "$RUNNER_TEMP/feasibility-evidence.json" --repo "$GITHUB_REPOSITORY"
+          cp "$RUNNER_TEMP/feasibility-evidence.json" "$RUNNER_TEMP/altered-evidence.json"
+          echo 'tampered' >> "$RUNNER_TEMP/altered-evidence.json"
+          if gh attestation verify "$RUNNER_TEMP/altered-evidence.json" --repo "$GITHUB_REPOSITORY"; then
+            echo 'Attestation accepted altered bytes'
+            exit 1
+          fi
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: feasibility-evidence
+          path: ${{ runner.temp }}/feasibility-evidence.json
+          retention-days: 30
+          if-no-files-found: error

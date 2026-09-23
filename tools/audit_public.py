@@ -33,7 +33,7 @@ FORBIDDEN_SUFFIXES = {
 }
 FORBIDDEN_NAMES = {"settings.json", "connection.js", ".env", "helper.pid"}
 FORBIDDEN_DIRS = {"Signed", "runtime", ".venv", "venv", "__pycache__"}
-TEXT_SUFFIXES = {".py", ".js", ".html", ".json", ".md", ".txt", ".yml", ".yaml", ".cmd", ".sh", ".patch"}
+TEXT_SUFFIXES = {".py", ".js", ".html", ".json", ".md", ".txt", ".yml", ".yaml", ".cmd", ".sh", ".ps1", ".patch"}
 TEXT_NAMES = {".gitignore", ".gitattributes", "LICENSE", "NOTICE", "Dockerfile"}
 PATTERNS = {
     "embedded key or certificate": re.compile(
