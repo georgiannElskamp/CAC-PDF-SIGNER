@@ -165,6 +165,16 @@ def watch(force=False):
 def health():
     state, _ = load_state()
     problems = []
+    if os.environ.get("PIPELINE_ENABLED") == "true":
+        try:
+            item = api(f"/repos/{PRIVATE}/contents/pipeline.json?ref=state")
+            pipeline = json.loads(base64.b64decode(item["content"]))
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+            pipeline = {}
+        if stale(pipeline.get("lastSuccessfulPoll"), 3):
+            problems.append("Research controller has no successful reconciliation in three hours.")
     if stale(state.get("lastSuccessfulPoll"), 48):
         problems.append("No successful discovery in the past 48 hours. Check App credentials and the Discovery workflow.")
     for key, record in state["records"].items():

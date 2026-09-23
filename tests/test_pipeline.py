@@ -129,6 +129,37 @@ class ApprovedPublicationTests(unittest.TestCase):
                         reviews + [dict(reviews[0], state='CHANGES_REQUESTED', submitted_at='2026-01-02')]):
             with self.assertRaises(ValueError): release.approved_pull(value, invalid, MAIN)
 
+    def test_release_inspection_requires_complete_current_run_and_later_approval(self):
+        value, reviews = self.approved()
+        value.update(merged_at='2026-01-03T00:00:00Z')
+        reviews[0]['submitted_at'] = '2026-01-02T00:00:00Z'
+        build = dict(run(), head_branch='release-verification', updated_at=STAMP)
+        gate = {'name':'Candidate qualification','conclusion':'success'}
+        artifact = {'id':99,'name':'candidate','expired':False}
+        def api(path):
+            if path.endswith('/heads/main'): return {'object':{'sha':MAIN}}
+            if path.endswith('/pulls/123'): return value
+            if '/git/commits/' in path: return {'tree':{'sha':'c'*40}}
+            self.fail(path)
+        def pages(path, **kwargs):
+            if '/commits/' in path and path.endswith('/pulls'): return [value]
+            if path.endswith('/reviews'): return reviews
+            if '/runs?' in path: return [build]
+            if '/jobs?' in path: return [gate]
+            if path.endswith('/artifacts'): return [artifact]
+            self.fail(path)
+        with patch.object(release,'api',side_effect=api), patch.object(release,'pages',side_effect=pages):
+            self.assertEqual(release.inspect(MAIN)['artifact'],99)
+            for status in ('failure','skipped',None):
+                gate['conclusion']=status
+                with self.assertRaises(ValueError): release.inspect(MAIN)
+            gate['conclusion']='success'
+            artifact['expired']=True
+            with self.assertRaises(ValueError): release.inspect(MAIN)
+            artifact['expired']=False
+            build['updated_at']='2026-01-03T00:00:00Z'
+            with self.assertRaisesRegex(ValueError,'after its latest build'): release.inspect(MAIN)
+
     def test_existing_release_tag_cannot_be_repointed(self):
         proof = {'main': MAIN}
         with tempfile.TemporaryDirectory() as folder, patch.object(release, 'inspect', return_value=proof), patch.object(release, 'validate_package', return_value={'tag': 'v1.0.0'}), patch.object(release, 'optional', return_value={'object': {'type': 'commit', 'sha': SHA}}), patch.object(release, 'api') as api:
