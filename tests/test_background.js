@@ -119,29 +119,158 @@ function adapterTest() {
   assert.throws(() => context.window.CACDesktop(host), /ONLYOFFICE unknown needs/);
 }
 adapterTest();
-async function startupTest(fail, unload) {
+function formAdapterTest(version) {
+  const callbacks = {}, timers = [], clicks = [], errors = [], shown = [];
+  const dialog = { show() { shown.push("native"); } };
+  const originalShow = dialog.show;
+  let modified = false, preview = true;
+  const api = {
+    asc_getPdfProps: vm.runInNewContext("(function(){return null})"),
+    GetVersion: () => version,
+    isDocumentModified: () => modified,
+    asc_getDocumentName: () => "form.pdf",
+    pluginMethod_IsFillingFormMode: () => preview,
+    pluginMethod_GetAllForms: () => [{ InternalId: "1603", FormKey: "Signature1", FormValue: "" }],
+    asc_registerCallback: (name, fn) => { callbacks[name] = fn; },
+    asc_unregisterCallback: (name, fn) => { if (callbacks[name] === fn) delete callbacks[name]; },
+  };
+  const host = {
+    Asc: { editor: api },
+    AscDesktopEditor: { LocalFileGetSourcePath: () => "C:\\Test User\\form.pdf" },
+    Common: { Views: { PdfSignDialog: function () {} } },
+  };
+  host.Common.Views.PdfSignDialog.prototype = dialog;
+  const context = { window: { setTimeout: (fn) => timers.push(fn) } };
+  vm.createContext(context);
+  vm.runInContext(fs.readFileSync(path.join(root, "plugin/desktop-adapter.js"), "utf8"), context);
+  const adapter = context.window.CACDesktop(host);
+  adapter.attach((field) => clicks.push(field), (error) => errors.push(error));
+  assert.equal(adapter.snapshot("Signature1").kind, "onlyoffice-form");
+  const action = { type: 12, pr: {
+    get_InternalId: () => "1603",
+    get_FormPr: () => ({ get_Key: () => "Signature1" }),
+  } };
+  dialog.show();
+  callbacks.asc_onShowContentControlsActions(action);
+  timers.shift()();
+  assert.deepEqual(clicks, ["Signature1"]);
+  assert.deepEqual(shown, []);
+  api.pluginMethod_GetAllForms = () => { throw new Error("form inspection failed"); };
+  dialog.show();
+  callbacks.asc_onShowContentControlsActions(action);
+  timers.shift()();
+  assert.deepEqual(shown, []);
+  assert.match(errors.pop().message, /form inspection failed/);
+  api.pluginMethod_GetAllForms = () => [{ InternalId: "1603", FormKey: "Signature1", FormValue: "" }];
+  dialog.show();
+  callbacks.asc_onShowContentControlsActions({ type: 12, pr: {} });
+  timers.shift()();
+  assert.deepEqual(shown, []);
+  assert.match(errors.pop().message, /could not be identified/);
+  api.pluginMethod_IsFillingFormMode = () => { throw new Error("mode inspection failed"); };
+  dialog.show();
+  callbacks.asc_onShowContentControlsActions(action);
+  timers.shift()();
+  assert.deepEqual(shown, []);
+  assert.match(errors.pop().message, /mode inspection failed/);
+  api.pluginMethod_IsFillingFormMode = () => preview;
+  dialog.show();
+  callbacks.asc_onShowContentControlsActions({ type: 4 });
+  timers.shift()();
+  assert.deepEqual(shown, ["native"]);
+  preview = false;
+  dialog.show();
+  callbacks.asc_onShowContentControlsActions(action);
+  timers.shift()();
+  assert.deepEqual(shown, ["native", "native"]);
+  modified = true;
+  assert.throws(() => adapter.snapshot("Signature1"), /reopen/);
+  callbacks.asc_onDocumentModifiedChanged();
+  modified = false;
+  assert.throws(() => adapter.snapshot("Signature1"), /reopen/);
+  assert.equal(errors.length, 0);
+  adapter.detach();
+  assert.equal(dialog.show, originalShow);
+  assert.equal(callbacks.asc_onShowContentControlsActions, undefined);
+  api.GetVersion = () => "9.4.0.128";
+  assert.throws(() => context.window.CACDesktop(host), /adapter update/);
+}
+formAdapterTest("9.4.0");
+formAdapterTest("9.4.0.129");
+async function startupTest(fail, unload, info = { editorType: "pdf" }) {
   const events = [], handlers = {};
   let resolve, reject;
   const pending = new Promise((ok, no) => { resolve = ok; reject = no; });
   const context = {
-    Asc: { plugin: { info: { editorType: "pdf" } } },
+    Asc: { plugin: { info } },
     window: { addEventListener: (name, fn) => { handlers[name] = fn; } },
-    parent: { Common: { UI: { warning: () => events.push("error") } } },
+    parent: {
+      Asc: { editor: { pluginMethod_GetAllForms() {} } },
+      Common: { UI: { warning: () => events.push("error") } },
+    },
     CACNativeClient: () => ({ call: (request) => {
       assert.equal(request.op, "preflight");
+      if (info.editorType === "word")
+        assert.equal(request.sourcePath, "C:\\Test User\\form.pdf");
       events.push("preflight"); return pending;
     }, close: () => events.push("close") }),
-    CACDesktop: () => ({ attach: () => events.push("attach"), detach: () => events.push("detach") }),
+    CACDesktop: () => ({
+      sourcePath: info.editorType === "word" ? () => "C:\\Test User\\form.pdf" : undefined,
+      attach: () => events.push("attach"), detach: () => events.push("detach"),
+    }),
   };
   vm.runInNewContext(fs.readFileSync(path.join(root, "plugin/standalone-background.js"), "utf8"), context);
   const started = context.Asc.plugin.init();
   await context.Asc.plugin.init();
   assert.deepEqual(events, ["preflight"]);
   if (unload) handlers.unload();
-  if (fail) reject(new Error("Startup failed")); else resolve({ ok: true });
+  if (fail) reject(new Error("Startup failed"));
+  else resolve({ ok: true, sourceHash: "a".repeat(64) });
   await started;
   assert.deepEqual(events, unload ? ["preflight", "detach", "close"] : ["preflight", fail ? "error" : "attach"]);
 }
-Promise.all([startupTest(false, false), startupTest(true, false), startupTest(false, true)])
-  .then(() => console.log("PASS: fields, unsaved edits, version guard, startup preflight and cleanup"))
+async function formBaselineTest() {
+  let click, sourcePath = "C:\\Test User\\form.pdf";
+  const requests = [], warnings = [];
+  const context = {
+    Asc: { plugin: { info: { editorType: "word", documentTitle: "form.pdf" } } },
+    window: { addEventListener() {} },
+    parent: {
+      Asc: { editor: { pluginMethod_GetAllForms() {} } },
+      AscDesktopEditor: { _openExternalReference() {} },
+      Common: { UI: { warning: (message) => warnings.push(message) } },
+    },
+    CACDesktop: () => ({
+      sourcePath: () => sourcePath,
+      snapshot: () => ({ kind: "onlyoffice-form", sourcePath, name: "form.pdf" }),
+      attach: (handler) => { click = handler; }, detach() {},
+    }),
+    CACNativeClient: () => ({
+      call: async (request) => {
+        requests.push(request);
+        return request.op === "preflight"
+          ? { ok: true, sourceHash: "b".repeat(64) }
+          : { ok: true, saved: true, integrityVerified: true, path: "C:\\signed.pdf" };
+      },
+      close() {},
+    }),
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(root, "plugin/standalone-background.js"), "utf8"), context);
+  await context.Asc.plugin.init();
+  click("Signature1");
+  await new Promise(setImmediate);
+  assert.equal(requests[1].expectedSourceHash, "b".repeat(64));
+  assert.equal(requests[1].sourcePath, "C:\\Test User\\form.pdf");
+  sourcePath = "C:\\Test User\\another.pdf";
+  click("Signature2");
+  await new Promise(setImmediate);
+  assert.equal(requests.length, 2);
+  assert.equal(warnings.length, 1);
+}
+Promise.all([
+  startupTest(false, false), startupTest(true, false), startupTest(false, true),
+  startupTest(false, false, { editorType: "word", documentTitle: "form.pdf" }),
+  formBaselineTest(),
+])
+  .then(() => console.log("PASS: PDF and ONLYOFFICE form clicks, unsaved edits, version guard, startup and cleanup"))
   .catch(error => { console.error(error); process.exitCode = 1; });

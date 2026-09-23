@@ -19,6 +19,7 @@ from pyhanko.sign import signers
 from pyhanko.sign.validation import validate_pdf_signature
 from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.registry import SimpleCertificateStore
+from onlyoffice_form import prepare_signature
 from runtime_config import MAX_PDF
 from visible_signature import signing_appearance
 
@@ -111,14 +112,16 @@ class CardSigner(signers.Signer):
 def sign_bytes(pdf, signer, appearance=None):
     if len(pdf) > MAX_PDF or not pdf.startswith(b"%PDF-"):
         raise ValueError("Choose a PDF smaller than 40 MB.")
-    original = io.BytesIO(pdf)
-    writer = IncrementalPdfFileWriter(original, strict=True)
-    if writer.prev.encrypted:
-        raise ValueError(
-            "Password-protected PDFs are not supported."
-        )
+    native_form = isinstance(appearance, dict) and appearance.get("kind") == "onlyoffice-form"
+    if native_form:
+        writer, field = prepare_signature(pdf, appearance.get("field"))
+        appearance = {"field": field}
+    else:
+        writer = IncrementalPdfFileWriter(io.BytesIO(pdf), strict=True)
+        if writer.prev.encrypted:
+            raise ValueError("Password-protected PDFs are not supported.")
     field_name, field_spec, existing_only, style, params = signing_appearance(
-        writer.prev, signer.signing_cert, appearance
+        writer if native_form else writer.prev, signer.signing_cert, appearance
     )
     # The visible appearance is included in the cryptographic signature.
     result = signers.PdfSigner(
@@ -133,7 +136,7 @@ def sign_bytes(pdf, signer, appearance=None):
         bytes_reserved=65536,
     )
     signed = result.getvalue()
-    if not signed.startswith(pdf):
+    if not native_form and not signed.startswith(pdf):
         raise RuntimeError("Original PDF bytes were not preserved.")
     embedded = next(
         s
