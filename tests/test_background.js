@@ -155,6 +155,25 @@ function formAdapterTest(version) {
   timers.shift()();
   assert.deepEqual(clicks, ["Signature1"]);
   assert.deepEqual(shown, []);
+  api.pluginMethod_GetAllForms = () => { throw new Error("form inspection failed"); };
+  dialog.show();
+  callbacks.asc_onShowContentControlsActions(action);
+  timers.shift()();
+  assert.deepEqual(shown, []);
+  assert.match(errors.pop().message, /form inspection failed/);
+  api.pluginMethod_GetAllForms = () => [{ InternalId: "1603", FormKey: "Signature1", FormValue: "" }];
+  dialog.show();
+  callbacks.asc_onShowContentControlsActions({ type: 12, pr: {} });
+  timers.shift()();
+  assert.deepEqual(shown, []);
+  assert.match(errors.pop().message, /could not be identified/);
+  api.pluginMethod_IsFillingFormMode = () => { throw new Error("mode inspection failed"); };
+  dialog.show();
+  callbacks.asc_onShowContentControlsActions(action);
+  timers.shift()();
+  assert.deepEqual(shown, []);
+  assert.match(errors.pop().message, /mode inspection failed/);
+  api.pluginMethod_IsFillingFormMode = () => preview;
   dialog.show();
   callbacks.asc_onShowContentControlsActions({ type: 4 });
   timers.shift()();
@@ -191,22 +210,67 @@ async function startupTest(fail, unload, info = { editorType: "pdf" }) {
     },
     CACNativeClient: () => ({ call: (request) => {
       assert.equal(request.op, "preflight");
+      if (info.editorType === "word")
+        assert.equal(request.sourcePath, "C:\\Test User\\form.pdf");
       events.push("preflight"); return pending;
     }, close: () => events.push("close") }),
-    CACDesktop: () => ({ attach: () => events.push("attach"), detach: () => events.push("detach") }),
+    CACDesktop: () => ({
+      sourcePath: info.editorType === "word" ? () => "C:\\Test User\\form.pdf" : undefined,
+      attach: () => events.push("attach"), detach: () => events.push("detach"),
+    }),
   };
   vm.runInNewContext(fs.readFileSync(path.join(root, "plugin/standalone-background.js"), "utf8"), context);
   const started = context.Asc.plugin.init();
   await context.Asc.plugin.init();
   assert.deepEqual(events, ["preflight"]);
   if (unload) handlers.unload();
-  if (fail) reject(new Error("Startup failed")); else resolve({ ok: true });
+  if (fail) reject(new Error("Startup failed"));
+  else resolve({ ok: true, sourceHash: "a".repeat(64) });
   await started;
   assert.deepEqual(events, unload ? ["preflight", "detach", "close"] : ["preflight", fail ? "error" : "attach"]);
+}
+async function formBaselineTest() {
+  let click, sourcePath = "C:\\Test User\\form.pdf";
+  const requests = [], warnings = [];
+  const context = {
+    Asc: { plugin: { info: { editorType: "word", documentTitle: "form.pdf" } } },
+    window: { addEventListener() {} },
+    parent: {
+      Asc: { editor: { pluginMethod_GetAllForms() {} } },
+      AscDesktopEditor: { _openExternalReference() {} },
+      Common: { UI: { warning: (message) => warnings.push(message) } },
+    },
+    CACDesktop: () => ({
+      sourcePath: () => sourcePath,
+      snapshot: () => ({ kind: "onlyoffice-form", sourcePath, name: "form.pdf" }),
+      attach: (handler) => { click = handler; }, detach() {},
+    }),
+    CACNativeClient: () => ({
+      call: async (request) => {
+        requests.push(request);
+        return request.op === "preflight"
+          ? { ok: true, sourceHash: "b".repeat(64) }
+          : { ok: true, saved: true, integrityVerified: true, path: "C:\\signed.pdf" };
+      },
+      close() {},
+    }),
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(root, "plugin/standalone-background.js"), "utf8"), context);
+  await context.Asc.plugin.init();
+  click("Signature1");
+  await new Promise(setImmediate);
+  assert.equal(requests[1].expectedSourceHash, "b".repeat(64));
+  assert.equal(requests[1].sourcePath, "C:\\Test User\\form.pdf");
+  sourcePath = "C:\\Test User\\another.pdf";
+  click("Signature2");
+  await new Promise(setImmediate);
+  assert.equal(requests.length, 2);
+  assert.equal(warnings.length, 1);
 }
 Promise.all([
   startupTest(false, false), startupTest(true, false), startupTest(false, true),
   startupTest(false, false, { editorType: "word", documentTitle: "form.pdf" }),
+  formBaselineTest(),
 ])
   .then(() => console.log("PASS: PDF and ONLYOFFICE form clicks, unsaved edits, version guard, startup and cleanup"))
   .catch(error => { console.error(error); process.exitCode = 1; });

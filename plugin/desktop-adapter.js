@@ -34,6 +34,12 @@ window.CACDesktop = function (host) {
     const dialog = host.Common.Views.PdfSignDialog.prototype;
     let originalShow, showHandler, onAction;
     const pending = [];
+    function sourcePath() {
+      const path = native.LocalFileGetSourcePath();
+      if (typeof path !== "string" || !/\.pdf$/i.test(path))
+        throw new Error("Save and reopen the local PDF form before signing.");
+      return path;
+    }
     function snapshot(field) {
       if (api.isDocumentModified() || editedSinceLoad)
         throw new Error("Save your PDF form edits and reopen it before signing.");
@@ -43,13 +49,10 @@ window.CACDesktop = function (host) {
       ) : [];
       if (matches.length !== 1)
         throw new Error("This ONLYOFFICE signature box is filled or ambiguous.");
-      const sourcePath = native.LocalFileGetSourcePath();
-      if (typeof sourcePath !== "string" || !/\.pdf$/i.test(sourcePath))
-        throw new Error("Save and reopen the local PDF form before signing.");
       return {
         kind: "onlyoffice-form",
         name: api.asc_getDocumentName(),
-        sourcePath,
+        sourcePath: sourcePath(),
       };
     }
     function attach(onClick, onError) {
@@ -67,22 +70,32 @@ window.CACDesktop = function (host) {
       dialog.show = showHandler;
       onAction = (action) => {
         const token = pending[pending.length - 1];
-        if (!token || !action || action.type !== 12 ||
-            !api.pluginMethod_IsFillingFormMode()) return;
+        if (!token || !action || action.type !== 12) return;
+        let filling;
+        try {
+          filling = api.pluginMethod_IsFillingFormMode();
+        } catch (error) {
+          token.claimed = true;
+          onError(error);
+          return;
+        }
+        if (!filling) return;
+        token.claimed = true;
         try {
           const pr = action.pr;
           const formPr = pr && typeof pr.get_FormPr === "function" && pr.get_FormPr();
           const field = formPr && typeof formPr.get_Key === "function" && formPr.get_Key();
           const id = pr && typeof pr.get_InternalId === "function" && String(pr.get_InternalId());
-          if (typeof field !== "string" || !field || !id) return;
+          if (typeof field !== "string" || !field || !id)
+            throw new Error("The ONLYOFFICE signature box could not be identified.");
           const forms = api.pluginMethod_GetAllForms();
           if (!Array.isArray(forms) || forms.filter(
             (f) => f.FormKey === field && String(f.InternalId) === id && !f.FormValue,
-          ).length !== 1) return;
-          token.claimed = true;
+          ).length !== 1)
+            throw new Error("This ONLYOFFICE signature box is filled or ambiguous.");
           onClick(field);
         } catch (error) {
-          if (token.claimed) onError(error);
+          onError(error);
         }
       };
       api.asc_registerCallback("asc_onShowContentControlsActions", onAction);
@@ -94,7 +107,7 @@ window.CACDesktop = function (host) {
       for (const token of pending) token.claimed = true;
       pending.length = 0;
     }
-    return { snapshot, attach, detach };
+    return { snapshot, attach, detach, sourcePath };
   }
   function renderer() {
     const r = api.jf;

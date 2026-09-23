@@ -280,13 +280,14 @@ async function backgroundTest(kind = "pdf-signature") {
     btoa: (value) => Buffer.from(value, "binary").toString("base64"),
     CACNativeClient: () => ({
       call: (request) => {
-        if (request.op === "preflight") return Promise.resolve({ ok: true });
+        if (request.op === "preflight") return Promise.resolve({ ok: true, sourceHash: "c".repeat(64) });
         requests.push(request);
         return new Promise((resolve) => (finish = resolve));
       },
       close() {},
     }),
     CACDesktop: () => ({
+      sourcePath: kind === "onlyoffice-form" ? () => "C:\\example.pdf" : undefined,
       attach: (fn) => (click = fn),
       detach() {},
       snapshot: () => ({
@@ -311,6 +312,7 @@ async function backgroundTest(kind = "pdf-signature") {
   if (kind === "onlyoffice-form") {
     assert.equal(requests[1].kind, kind);
     assert.equal(requests[1].pdf, undefined);
+    assert.equal(requests[1].expectedSourceHash, "c".repeat(64));
   } else {
     assert.ok(requests[1].pdf);
   }

@@ -7,6 +7,7 @@
     busy = false,
     lastError = "";
   const completed = new Set();
+  let formBaseline;
   function errorMessage(error) {
     const message = error.message || String(error);
     if (lastError === message) return;
@@ -42,8 +43,12 @@
         name: source.name,
         sourcePath: source.sourcePath,
       };
-      if (source.kind === "onlyoffice-form") request.kind = source.kind;
-      else request.pdf = base64(source.bytes);
+      if (source.kind === "onlyoffice-form") {
+        if (!formBaseline || source.sourcePath !== formBaseline.path)
+          throw new Error("Reopen the PDF form before signing.");
+        request.kind = source.kind;
+        request.expectedSourceHash = formBaseline.hash;
+      } else request.pdf = base64(source.bytes);
       const result = await client.call(request);
       if (result.cancelled) return;
       if (!result.saved || !result.integrityVerified)
@@ -81,7 +86,15 @@
     try {
       adapter = CACDesktop(parent);
       client = CACNativeClient();
-      await client.call({ op: "preflight" });
+      const preflight = { op: "preflight" };
+      if (typeof adapter.sourcePath === "function")
+        preflight.sourcePath = adapter.sourcePath();
+      const ready = await client.call(preflight);
+      if (preflight.sourcePath) {
+        if (!/^[0-9a-f]{64}$/.test(ready.sourceHash || ""))
+          throw new Error("The saved PDF form could not be verified. Reopen it.");
+        formBaseline = { path: preflight.sourcePath, hash: ready.sourceHash };
+      }
       if (disposed) return;
       adapter.attach(sign, errorMessage);
     } catch (error) {

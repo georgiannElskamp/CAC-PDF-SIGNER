@@ -18,6 +18,26 @@ from runtime_config import MAX_PDF, VERSION, state_directory
 MAX_REQUEST = MAX_PDF * 4 // 3 + 16384
 
 
+def read_form_source(source):
+    if not isinstance(source, str) or not source:
+        raise ValueError("Save and reopen the ONLYOFFICE PDF form before signing.")
+    path = Path(source)
+    if not path.is_absolute() or path.suffix.lower() != ".pdf":
+        raise ValueError("A saved local PDF form is required.")
+    before = path.stat()
+    if before.st_size > MAX_PDF:
+        raise ValueError("Choose a PDF smaller than 40 MB.")
+    pdf = path.read_bytes()
+    after = path.stat()
+    if (before.st_dev, before.st_ino, before.st_mtime_ns, before.st_size) != (
+        after.st_dev, after.st_ino, after.st_mtime_ns, after.st_size
+    ):
+        raise ValueError("The PDF changed while it was being read. Reopen it and retry.")
+    if len(pdf) > MAX_PDF or not pdf.startswith(b"%PDF-"):
+        raise ValueError("Choose a PDF smaller than 40 MB.")
+    return pdf
+
+
 def valid_windows_destination(filename):
     path = PureWindowsPath(filename)
     drive = path.drive
@@ -148,19 +168,12 @@ class SigningSession:
 
         kind = request.get("kind", "pdf-signature")
         if kind == "onlyoffice-form":
-            source = request.get("sourcePath")
-            if not isinstance(source, str) or not source:
-                raise ValueError("Save and reopen the ONLYOFFICE PDF form before signing.")
-            source_path = Path(source)
-            if not source_path.is_absolute() or source_path.suffix.lower() != ".pdf":
-                raise ValueError("A saved local PDF form is required.")
-            if source_path.stat().st_size > MAX_PDF:
-                raise ValueError("Choose a PDF smaller than 40 MB.")
-            before = source_path.stat()
-            pdf = source_path.read_bytes()
-            after = source_path.stat()
-            if (before.st_mtime_ns, before.st_size) != (after.st_mtime_ns, after.st_size):
-                raise ValueError("The PDF changed while it was being read. Reopen it and retry.")
+            pdf = read_form_source(request.get("sourcePath"))
+            expected = request.get("expectedSourceHash")
+            if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
+                raise ValueError("Reopen the PDF form before signing.")
+            if hashlib.sha256(pdf).hexdigest() != expected:
+                raise ValueError("The PDF changed after opening. Reopen it before signing.")
         elif kind == "pdf-signature":
             pdf = base64.b64decode(request["pdf"], validate=True)
         else:
@@ -322,6 +335,10 @@ def main():
                 SigningSession(state_directory(), bridge).prepare_output()
                 result.update(dependencyCheckOnly=False, desktopReady=True,
                               recoveryWritable=True, cardChecked=False)
+                if "sourcePath" in request:
+                    result["sourceHash"] = hashlib.sha256(
+                        read_form_source(request["sourcePath"])
+                    ).hexdigest()
         elif request.get("op") == "sign":
             result = SigningSession(state_directory(), bridge).run(request)
         else:

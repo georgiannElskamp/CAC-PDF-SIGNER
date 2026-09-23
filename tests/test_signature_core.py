@@ -4,6 +4,7 @@ import base64
 import datetime
 import io
 import unittest
+import zipfile
 
 import signing
 from asn1crypto import keys
@@ -137,22 +138,48 @@ class SignatureTests(unittest.TestCase):
             generic.pdf_name("/A"): action,
         })
         box_ref = writer.add_object(box)
+        second_box = generic.DictionaryObject(box)
+        second_box[generic.pdf_name("/T")] = generic.TextStringObject("Signature2_af_image")
+        second_box[generic.pdf_name("/Rect")] = generic.ArrayObject([
+            generic.NumberObject(n) for n in (250, 688, 404, 720)
+        ])
+        second_ref = writer.add_object(second_box)
+        image_box = generic.DictionaryObject(box)
+        image_box[generic.pdf_name("/T")] = generic.TextStringObject("Image1_af_image")
+        image_box[generic.pdf_name("/Rect")] = generic.ArrayObject([
+            generic.NumberObject(n) for n in (70, 610, 224, 670)
+        ])
+        image_ref = writer.add_object(image_box)
         page_obj = page_ref.get_object()
-        page_obj[generic.pdf_name("/Annots")] = generic.ArrayObject([box_ref])
+        page_obj[generic.pdf_name("/Annots")] = generic.ArrayObject([
+            box_ref, second_ref, image_ref
+        ])
         writer.update_container(page_obj)
         writer.root[generic.pdf_name("/AcroForm")] = generic.DictionaryObject({
-            generic.pdf_name("/Fields"): generic.ArrayObject([box_ref]),
+            generic.pdf_name("/Fields"): generic.ArrayObject([
+                box_ref, second_ref, image_ref
+            ]),
         })
         writer.update_root()
-        writer.add_object(generic.DictionaryObject({
-            generic.pdf_name("/Type"): generic.pdf_name("/MetaOForm"),
-            generic.pdf_name("/ONLYOFFICEFORM"): generic.ArrayObject([
-                generic.NumberObject(0), generic.NumberObject(0)
-            ]),
-            generic.pdf_name("/PackagePayload"): generic.TextStringObject(
-                "SYNTHETIC_ONLYOFFICE_PACKAGE"
-            ),
-        }))
+        package = io.BytesIO()
+        with zipfile.ZipFile(package, "w", zipfile.ZIP_DEFLATED) as archive:
+            archive.writestr("word/document.xml", """
+                <w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">
+                    <w:sdtPr><w:picture w:signature="1"/><w:formPr w:key="Signature1"/></w:sdtPr>
+                    <w:sdtPr><w:picture w:signature="1"/><w:formPr w:key="Signature1"/></w:sdtPr>
+                    <w:sdtPr><w:picture w:signature="1"/><w:formPr w:key="Signature2"/></w:sdtPr>
+                    <w:sdtPr><w:picture/><w:formPr w:key="Image1"/></w:sdtPr>
+                </w:document>
+            """)
+        writer.add_object(generic.StreamObject(
+            dict_data={
+                generic.pdf_name("/Type"): generic.pdf_name("/MetaOForm"),
+                generic.pdf_name("/ONLYOFFICEFORM"): generic.ArrayObject([
+                    generic.NumberObject(0), generic.NumberObject(0)
+                ]),
+            },
+            stream_data=package.getvalue(),
+        ))
         output = io.BytesIO()
         writer.write(output)
         pdf = output.getvalue()
@@ -169,12 +196,31 @@ class SignatureTests(unittest.TestCase):
         self.assertEqual([float(n) for n in signature.sig_field["/Rect"]], [70, 688, 224, 720])
         self.assertNotIn(b"/MetaOForm", signed)
         self.assertNotIn(b"/ONLYOFFICEFORM", signed)
-        self.assertNotIn(b"SYNTHETIC_ONLYOFFICE_PACKAGE", signed)
+        self.assertNotIn(b"word/document.xml", signed)
         self.assertNotIn("/A", signature.sig_field)
+        signature_fields = list(fields.enumerate_sig_fields(reader))
+        self.assertEqual(
+            [field_name for field_name, _, _ in signature_fields],
+            ["Signature1_af_image", "Signature2_af_image"],
+        )
+        self.assertIsNone(signature_fields[1][1])
+        self.assertNotIn("/A", signature_fields[1][2].get_object())
+        image_field = list(fields.enumerate_fields_in(
+            reader.root["/AcroForm"]["/Fields"], with_name="Image1_af_image",
+            refs_seen=set(), target_field_type="/Btn",
+        ))
+        self.assertEqual(len(image_field), 1)
+        self.assertEqual(image_field[0][2].get_object()["/A"]["/S"], "/JavaScript")
+        twice_signed = signing.sign_bytes(signed, self.signer, {
+            "field": "Signature2_af_image",
+        })
+        self.assertEqual(len(PdfFileReader(io.BytesIO(twice_signed)).embedded_signatures), 2)
         with self.assertRaisesRegex(ValueError, "not a saved ONLYOFFICE"):
             signing.sign_bytes(self.pdf, self.signer, {"kind": "onlyoffice-form", "field": "Signature1"})
-        with self.assertRaisesRegex(ValueError, "missing or ambiguous"):
+        with self.assertRaisesRegex(ValueError, "not an ONLYOFFICE signature box"):
             signing.sign_bytes(pdf, self.signer, {"kind": "onlyoffice-form", "field": "Other"})
+        with self.assertRaisesRegex(ValueError, "not an ONLYOFFICE signature box"):
+            signing.sign_bytes(pdf, self.signer, {"kind": "onlyoffice-form", "field": "Image1"})
 
     def test_card_selection_is_mocked(self):
         self.assertIs(
