@@ -2,9 +2,9 @@
 
 Sign existing PDF signature fields with a Common Access Card in ONLYOFFICE Desktop Editors. The background plugin fills the signature block with certificate details, scales the text to fit, and opens Save As.
 
-**[Download 0.7.0-rc.6](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/releases/tag/v0.7.0-rc.6)** · [Installation](docs/INSTALLATION.md) · [Validation status](docs/TESTING.md)
+**[Download the approved release](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/releases/latest)** · [Installation](docs/INSTALLATION.md) · [Validation status](docs/TESTING.md)
 
-This is the current approved release. The published plugin has been verified with a physical CAC on two additional Windows installations and with a simulated card in fresh Debian 12. Physical CAC signing on Linux remains unverified. The `0.7.0-rc.6` version label is retained to preserve the exact tested artifact.
+The physical-card validation baseline is `0.7.0-rc.6`, tested on two additional Windows installations. Fresh Debian 12 validation used a simulated card. Subsequent releases link their automated evidence and require maintainer approval. Physical CAC signing on Linux remains unverified.
 
 ## Compatibility
 
@@ -36,6 +36,8 @@ Turn the background plugin off before updating or removing it; reopen the PDF af
 - Leaves recovery copies in the user's application-data directory after uninstalling. Treat them as confidential documents.
 
 ## Development
+
+Changes flow through `research`, a frozen `release-verification` candidate, and maintainer-approved `main`. Only main publishes a GitHub release. See the [maintenance guide](docs/AUTOMATION.md).
 
 The signing modules stay at the root; editor integration is in `plugin/`, build and release commands in `tools/`, and checks in `tests/`. Generated release assets are excluded from Git. The package includes the corresponding source and dependency notices.
 

@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import re
+import sys
 import time
 import urllib.error
 import urllib.parse
@@ -14,6 +15,8 @@ import urllib.request
 REPOSITORY = "georgiannElskamp/CAC-PDF-SIGNER"
 UPSTREAM = "ONLYOFFICE/DesktopEditors"
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "automation/controller"))
+from release_manifest import resolve as resolve_plugin
 ASSETS = {"windows": "DesktopEditors_x64.exe", "linux": "onlyoffice-desktopeditors_amd64.deb"}
 TAG = re.compile(r"v[0-9]+(?:\.[0-9]+){1,3}\Z")
 SHA256 = re.compile(r"[a-f0-9]{64}\Z")
@@ -116,7 +119,7 @@ def combination(manifest, approved, harness):
 
 def prepare(tag, output, expected=""):
     output.mkdir(parents=True, exist_ok=True)
-    approved = json.loads((ROOT / "tests/approved-plugin.json").read_text())
+    approved = resolve_plugin(api, json.loads((ROOT / "tests/approved-plugin.json").read_text()))
     manifest = resolve_editor(tag)
     release = api(f"/repos/{REPOSITORY}/releases/tags/{approved['tag']}")
     if release["draft"] or release["prerelease"]:

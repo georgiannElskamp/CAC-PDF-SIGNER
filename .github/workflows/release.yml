@@ -1,159 +1,51 @@
 name: Publish release
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      tag:
-        description: Version tag with uploaded draft assets
-        required: true
-        type: string
 permissions:
   contents: read
 concurrency:
-  group: release-${{ inputs.tag }}
+  group: approved-release
   cancel-in-progress: false
 jobs:
-  checks:
-    uses: ./.github/workflows/checks.yml
-    with:
-      release_tag: ${{ inputs.tag }}
   publish:
-    needs: [checks, packaged-runtime, editor-installation, simulated-signing]
-    environment: release
-    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
     permissions:
       contents: write
+      actions: read
+      pull-requests: read
+      id-token: write
+      attestations: write
     env:
       GH_TOKEN: ${{ github.token }}
-      GH_REPO: ${{ github.repository }}
-      RELEASE_TAG: ${{ inputs.tag }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: refs/tags/${{ inputs.tag }}
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
-        with:
-          python-version: '3.11'
-      - name: Verify release assets
-        shell: bash
-        run: |
-          set -euo pipefail
-          gh release download "$RELEASE_TAG" --pattern CAC-PDF-Signer.plugin --pattern SHA256SUMS.txt --pattern INSTALL.txt --dir release
-          python -B tools/publish_release.py --tag "$RELEASE_TAG"
-      - name: Publish verified draft
-        shell: bash
-        run: |
-          set -euo pipefail
-          test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true
-          if [[ "$RELEASE_TAG" == *-* ]]; then
-            gh release edit "$RELEASE_TAG" --draft=false --prerelease --latest=false --verify-tag
-          else
-            gh release edit "$RELEASE_TAG" --draft=false --prerelease=false --latest --verify-tag
-          fi
-  packaged-runtime:
-    needs: checks
-    permissions:
-      contents: write # GitHub requires push access to read draft release assets.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    env:
-      GH_REPO: ${{ github.repository }}
-      RELEASE_TAG: ${{ inputs.tag }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
-          ref: refs/tags/${{ inputs.tag }}
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with:
           python-version: '3.11'
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+      - name: Check maintainer approval and exact candidate
+        id: approved
+        run: python -B tools/promote_release.py inspect "$RUNNER_TEMP/candidate"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          node-version: '22'
-      - name: Download the draft plugin
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release download "$RELEASE_TAG" --pattern CAC-PDF-Signer.plugin --dir release
-      - name: Run the uploaded native runtime
-        run: python -B tools/verify_package.py release/CAC-PDF-Signer.plugin
-  simulated-signing:
-    needs: packaged-runtime
-    runs-on: ubuntu-24.04
-    timeout-minutes: 35
-    permissions:
-      contents: write # Downloading draft assets requires push access.
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+          artifact-ids: ${{ steps.approved.outputs.artifact }}
+          run-id: ${{ steps.approved.outputs.run }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/candidate
+          merge-multiple: true
+      - name: Audit the package against approved source
+        run: python -B tools/promote_release.py validate "$RUNNER_TEMP/candidate"
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6
         with:
-          ref: refs/tags/${{ inputs.tag }}
-          persist-credentials: false
-      - name: Prepare draft signing test
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          RELEASE_TAG: ${{ inputs.tag }}
-        run: |
-          gh release download "$RELEASE_TAG" --pattern CAC-PDF-Signer.plugin --dir "$RUNNER_TEMP/input"
-          cp tests/editor-installers.json "$RUNNER_TEMP/input/editor.json"
-          python3 - <<'PY'
-          import json, os
-          from pathlib import Path
-          (Path(os.environ['RUNNER_TEMP']) / 'input/metadata.json').write_text(json.dumps({'plugin': {'tag': os.environ['RELEASE_TAG']}}))
-          PY
-      - name: Check signature, appearance and Save As recovery
-        run: bash tests/linux/run-container.sh "$RUNNER_TEMP/input" "$RUNNER_TEMP/report"
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
-        if: always()
-        with:
-          name: release-signing-report
-          path: |
-            ${{ runner.temp }}/report/signing-result.json
-            ${{ runner.temp }}/report/signed-preview.png
-            ${{ runner.temp }}/report/field-screen.png
-            ${{ runner.temp }}/report/ui-failure.png
-          retention-days: 14
-          if-no-files-found: error
-  editor-installation:
-    needs: packaged-runtime
-    timeout-minutes: 20
-    permissions:
-      contents: write # GitHub requires push access to read draft release assets.
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [windows-latest, ubuntu-latest]
-    runs-on: ${{ matrix.os }}
-    env:
-      GH_REPO: ${{ github.repository }}
-      RELEASE_TAG: ${{ inputs.tag }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          ref: refs/tags/${{ inputs.tag }}
-          persist-credentials: false
-      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
-        with:
-          python-version: '3.11'
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
-        with:
-          node-version: '22'
-      - name: Download the draft plugin
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release download "$RELEASE_TAG" --pattern CAC-PDF-Signer.plugin --dir release
-      - name: Prepare the Linux display
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y xvfb xauth
-      - name: Test installation on Linux
-        if: runner.os == 'Linux'
-        run: xvfb-run -a python -B tests/editor_ci.py release/CAC-PDF-Signer.plugin
-      - name: Test installation on Windows
-        if: runner.os == 'Windows'
-        run: python -B tests/editor_ci.py release/CAC-PDF-Signer.plugin
+          subject-path: |
+            ${{ runner.temp }}/candidate/CAC-PDF-Signer.plugin
+            ${{ runner.temp }}/candidate/release-evidence.json
+      - name: Verify attested package provenance
+        run: gh attestation verify "$RUNNER_TEMP/candidate/CAC-PDF-Signer.plugin" --repo "$GITHUB_REPOSITORY"
+      - name: Publish the tested bytes
+        run: python -B tools/promote_release.py publish "$RUNNER_TEMP/candidate"

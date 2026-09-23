@@ -1,9 +1,12 @@
 name: Build candidate
 on:
+  push:
+    branches: [research, release-verification]
   workflow_dispatch:
   workflow_call:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: candidate-${{ github.ref }}
   cancel-in-progress: false
@@ -63,8 +66,27 @@ jobs:
             ${{ runner.temp }}/candidate/editor.json
             ${{ runner.temp }}/candidate/metadata.json
             ${{ runner.temp }}/candidate/components.cdx.json
-          retention-days: 14
+          retention-days: ${{ github.ref == 'refs/heads/release-verification' && 90 || 1 }}
           if-no-files-found: error
   validate:
     needs: windows
     uses: ./.github/workflows/candidate-checks.yml
+  extended:
+    needs: windows
+    uses: ./.github/workflows/qualification.yml
+  qualified:
+    name: Candidate qualification
+    if: always()
+    needs: [source, linux, windows, validate, extended]
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Require all candidate tests
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os
+          results=json.loads(os.environ['RESULTS'])
+          assert results and all(job['result']=='success' for job in results.values()), results
+          PY

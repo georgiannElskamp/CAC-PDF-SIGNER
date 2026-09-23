@@ -1,0 +1,216 @@
+name: Extended qualification
+on:
+  workflow_call:
+permissions:
+  contents: read
+  actions: read
+env:
+  PYTHONDONTWRITEBYTECODE: '1'
+jobs:
+  core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - name: Set disposable probe paths
+        shell: bash
+        run: |
+          echo "PROBE_REPORT=$RUNNER_TEMP/probe-report" >> "$GITHUB_ENV"
+          echo "PROBE_INPUT=$RUNNER_TEMP/probe-input" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with: {python-version: '3.11'}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with: {node-version: '22'}
+      - run: python -m pip install -r requirements-dev.txt
+      - run: sudo apt-get update && sudo apt-get install -y poppler-utils
+      - name: Check bounded lifecycle orderings and known defects
+        id: lifecycle
+        continue-on-error: true
+        run: node tests/qualification/lifecycle.js
+      - name: Check synthetic PDF corpus and render controls
+        id: pdf
+        continue-on-error: true
+        run: python -B tests/qualification/pdf_corpus.py
+      - name: Check destination failures and retained recovery
+        id: save
+        continue-on-error: true
+        run: python -B tests/qualification/save_faults.py
+      - name: Check evidence policy failure controls
+        id: gate
+        continue-on-error: true
+        run: python -B tests/qualification/gate.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: qualification-core
+          path: ${{ env.PROBE_REPORT }}
+          retention-days: 30
+          if-no-files-found: error
+      - name: Preserve any failed probe outcome
+        if: always()
+        env:
+          LIFECYCLE: ${{ steps.lifecycle.outcome }}
+          PDF: ${{ steps.pdf.outcome }}
+          SAVE: ${{ steps.save.outcome }}
+          GATE: ${{ steps.gate.outcome }}
+        run: test "$LIFECYCLE" = success && test "$PDF" = success && test "$SAVE" = success && test "$GATE" = success
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - name: Set disposable probe paths
+        shell: bash
+        run: |
+          echo "PROBE_REPORT=$RUNNER_TEMP/probe-report" >> "$GITHUB_ENV"
+          echo "PROBE_INPUT=$RUNNER_TEMP/probe-input" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with: {python-version: '3.11'}
+      - run: python -m pip install -r requirements-dev.txt
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: candidate
+          path: ${{ env.PROBE_INPUT }}
+      - name: Verify candidate identity
+        run: python -B tests/qualification/common.py
+      - name: Exercise real CNG and independent PDF verification
+        run: python -B tests/qualification/windows_cng.py
+      - name: Probe standard-user desktop coverage (diagnostic)
+        id: standard-user
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          python -B tests/qualification/desktop.py --install-only
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          ./tests/qualification/windows_user.ps1
+      - name: Record diagnostic outcome
+        if: always()
+        shell: python
+        env:
+          OUTCOME: ${{ steps.standard-user.outcome }}
+        run: |
+          import json, os
+          from pathlib import Path
+          Path(os.environ['PROBE_REPORT']).mkdir(parents=True, exist_ok=True)
+          (Path(os.environ['PROBE_REPORT'])/'windows-standard-user-coverage.json').write_text(json.dumps({
+            'status':os.environ['OUTCOME'], 'required':False,
+            'scope':'Diagnostic only: hosted Windows standard-user profile setup remains outside the qualified matrix.'}),encoding='utf-8')
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: qualification-windows-cng
+          path: ${{ env.PROBE_REPORT }}
+          retention-days: 30
+          if-no-files-found: error
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - name: Set disposable probe paths
+        shell: bash
+        run: |
+          echo "PROBE_REPORT=$RUNNER_TEMP/probe-report" >> "$GITHUB_ENV"
+          echo "PROBE_INPUT=$RUNNER_TEMP/probe-input" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with: {python-version: '3.11'}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with: {node-version: '22'}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: candidate
+          path: ${{ env.PROBE_INPUT }}
+      - name: Verify candidate identity
+        run: python -B tests/qualification/common.py
+      - name: Prepare Linux display
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y xvfb xauth libgbm1
+      - name: Test Linux UI enablement, repeated workers and restart
+        if: runner.os == 'Linux'
+        run: xvfb-run -a python -B tests/qualification/desktop.py
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: qualification-desktop-${{ matrix.os }}
+          path: ${{ env.PROBE_REPORT }}
+          retention-days: 30
+          if-no-files-found: error
+  virtual:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - name: Set disposable probe paths
+        shell: bash
+        run: |
+          echo "PROBE_REPORT=$RUNNER_TEMP/probe-report" >> "$GITHUB_ENV"
+          echo "PROBE_INPUT=$RUNNER_TEMP/probe-input" >> "$GITHUB_ENV"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with: {python-version: '3.11'}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: candidate
+          path: ${{ env.PROBE_INPUT }}
+      - name: Verify candidate identity
+        run: python -B tests/qualification/common.py
+      - name: Build virtual CAC test environment
+        run: docker build --pull -f tests/qualification/virtual/Dockerfile -t cac-virtual-qualification .
+      - name: Exercise bundled OpenSC with virtual card removal and reinsertion
+        run: |
+          docker run --rm --shm-size=1g -e GITHUB_SHA -e GITHUB_RUN_ID -e GITHUB_ACTIONS=true -e RUNNER_ENVIRONMENT=github-hosted \
+            --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/repo,readonly" \
+            --mount "type=bind,src=$PROBE_INPUT,dst=/input,readonly" \
+            --mount "type=bind,src=$PROBE_REPORT,dst=/evidence" cac-virtual-qualification
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: qualification-virtual
+          path: ${{ env.PROBE_REPORT }}
+          retention-days: 30
+          if-no-files-found: error
+  evidence:
+    if: always()
+    needs: [core, windows, desktop, virtual]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with: {persist-credentials: false}
+      - name: Set disposable probe paths
+        shell: bash
+        run: |
+          echo "PROBE_REPORT=$RUNNER_TEMP/probe-report" >> "$GITHUB_ENV"
+          echo "PROBE_INPUT=$RUNNER_TEMP/probe-input" >> "$GITHUB_ENV"
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: qualification-*
+          path: ${{ runner.temp }}/evidence
+      - name: Record all outcomes
+        env:
+          PROBE_JOBS: ${{ toJSON(needs) }}
+        run: python -B tests/qualification/collect.py "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/qualification-evidence.json"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        if: always()
+        with:
+          name: qualification-evidence
+          path: ${{ runner.temp }}/qualification-evidence.json
+          retention-days: 30
+          if-no-files-found: error
+      - name: Require every qualification lane
+        env:
+          CORE: ${{ needs.core.result }}
+          WINDOWS: ${{ needs.windows.result }}
+          DESKTOP: ${{ needs.desktop.result }}
+          VIRTUAL: ${{ needs.virtual.result }}
+        run: test "$CORE" = success && test "$WINDOWS" = success && test "$DESKTOP" = success && test "$VIRTUAL" = success

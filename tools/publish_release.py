@@ -1,4 +1,4 @@
-"""Check a local release, or push it and start GitHub release checks."""
+"""Check a local release package against its source."""
 
 import argparse
 import json
@@ -36,31 +36,13 @@ def check_release(tag=None):
 
 
 def publish(tag):
-    if command("git", "status", "--porcelain"):
-        raise ValueError("Commit the source changes before publishing.")
-    remote = command("git", "remote", "get-url", "origin")
-    match = re.fullmatch(r"(?:https://github\.com/|git@github\.com:)([\w.-]+/[\w.-]+?)(?:\.git)?", remote)
-    if not match:
-        raise ValueError("Origin must be a GitHub repository.")
-    repo = match[1]
-    command("gh", "repo", "view", repo, "--json", "nameWithOwner")
-    if command("git", "ls-remote", "--tags", "origin", "refs/tags/" + tag):
-        raise ValueError("This release tag already exists. Resume its draft workflow or choose a new version.")
-    command("git", "push", "--atomic", "origin", "HEAD:refs/heads/main", "HEAD:refs/tags/" + tag)
-    args = ["gh", "release", "create", tag, "--repo", repo, "--verify-tag", "--draft",
-            "--title", "CAC PDF Signer " + tag[1:], "--notes-file", "docs/RELEASE_NOTES.md"]
-    if "-" in tag:
-        args.append("--prerelease")
-    command(*args, *(str(ROOT / "release" / name) for name in ASSETS))
-    command("gh", "workflow", "run", "release.yml", "--repo", repo,
-            "--ref", "main", "--field", "tag=" + tag)
-    print(f"Release checks started: https://github.com/{repo}/actions/workflows/release.yml")
+    raise ValueError("Publish by approving and merging the release-verification PR into main.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag", help="Require this version tag (used by CI).")
-    parser.add_argument("--publish", action="store_true", help="Push main and the tag, upload a draft, and start release checks.")
+    parser.add_argument("--publish", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args()
     tag = check_release(args.tag)
     if args.publish:

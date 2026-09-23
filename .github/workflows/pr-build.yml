@@ -1,8 +1,11 @@
 name: Runtime change validation
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review, edited]
+    branches: [research]
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: pr-runtime-${{ github.event.pull_request.number }}
   cancel-in-progress: true
@@ -24,7 +27,6 @@ jobs:
         run: python3 -B tools/build_scope.py
   build:
     needs: changes
-    if: needs.changes.outputs.required == 'true'
     uses: ./.github/workflows/build-candidate.yml
   gate:
     name: Runtime build requirement
@@ -41,4 +43,4 @@ jobs:
           BUILD: ${{ needs.build.result }}
         run: |
           test "$CHANGES" = success
-          if [[ "$REQUIRED" == true ]]; then test "$BUILD" = success; else test "$BUILD" = skipped; fi
+          test "$BUILD" = success

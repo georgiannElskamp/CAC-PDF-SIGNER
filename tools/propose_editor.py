@@ -17,9 +17,9 @@ def propose(directory):
     if pin == json.loads((ROOT / "tests/editor-installers.json").read_text()):
         print("Approved editor pin already matches")
         return
-    base = api(f"/repos/{REPOSITORY}/git/ref/heads/main")["object"]["sha"]
+    base = api(f"/repos/{REPOSITORY}/git/ref/heads/research")["object"]["sha"]
     if base != metadata["harness"]:
-        print("Main advanced during testing; rerun compatibility before proposing a pin")
+        print("Research advanced during testing; rerun compatibility before proposing a pin")
         return
     branch = f"automation/editor-v{editor['version']}-{editor['linux']['sha256'][:8]}"
     try:
@@ -42,7 +42,7 @@ def propose(directory):
     commit = api(f"/repos/{REPOSITORY}/git/commits", method="POST", body={"message": "Record tested ONLYOFFICE " + editor["version"],
                  "tree": tree["sha"], "parents": [base]})
     api(f"/repos/{REPOSITORY}/git/refs", method="POST", body={"ref": "refs/heads/" + branch, "sha": commit["sha"]})
-    pull = api(f"/repos/{REPOSITORY}/pulls", method="POST", body={"head": branch, "base": "main", "draft": True,
+    pull = api(f"/repos/{REPOSITORY}/pulls", method="POST", body={"head": branch, "base": "research", "draft": False,
         "title": "Validate ONLYOFFICE " + editor["version"],
         "body": f"The unchanged published plugin passed [hosted compatibility checks]({run}). Update the approved installer pin and record that evidence.\n\nReview the editor hashes and coverage before merging. This does not rebuild or publish a plugin. Hardware coverage is unchanged."})
     print(pull["html_url"])
