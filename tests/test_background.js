@@ -253,7 +253,7 @@ async function formAdapterTest(version) {
   api.GetVersion = () => "9.4.0.128";
   assert.throws(() => context.window.CACDesktop(host), /adapter update/);
 }
-async function startupTest(fail, unload, info = { editorType: "pdf" }) {
+async function startupTest(fail, unload, info = { editorType: "pdf" }, normalPdf = false) {
   const events = [], handlers = {};
   let resolve, reject;
   const pending = new Promise((ok, no) => { resolve = ok; reject = no; });
@@ -262,7 +262,8 @@ async function startupTest(fail, unload, info = { editorType: "pdf" }) {
     setTimeout,
     window: { addEventListener: (name, fn) => { handlers[name] = fn; } },
     parent: {
-      Asc: { editor: { pluginMethod_GetAllForms() {} } },
+      Asc: { editor: { pluginMethod_GetAllForms() {},
+        asc_getPdfProps: vm.runInNewContext("(function(){return null})") } },
       Common: { UI: { warning: () => events.push("error") },
         Views: { PdfSignDialog: { prototype: { show() {} } } } },
     },
@@ -274,6 +275,11 @@ async function startupTest(fail, unload, info = { editorType: "pdf" }) {
       attach: () => events.push("attach"), detach: () => events.push("detach"),
     }),
   };
+  if (normalPdf) {
+    context.parent.Asc.editor.asc_getPdfProps = vm.runInNewContext(
+      "(function(){return this.jf?this.jf.vWe():null})");
+    delete context.parent.Common.Views;
+  }
   vm.runInNewContext(fs.readFileSync(path.join(root, "plugin/standalone-background.js"), "utf8"), context);
   const started = context.Asc.plugin.init();
   await context.Asc.plugin.init();
@@ -293,7 +299,8 @@ async function formHandoffTest() {
     window: { addEventListener() {} },
     btoa: (value) => Buffer.from(value, "binary").toString("base64"),
     parent: {
-      Asc: { editor: { pluginMethod_GetAllForms() {} } },
+      Asc: { editor: { pluginMethod_GetAllForms() {},
+        asc_getPdfProps: vm.runInNewContext("(function(){return null})") } },
       AscDesktopEditor: { _openExternalReference: (path) => opened.push(path) },
       Common: { UI: { warning: (message) => warnings.push(message) },
         Views: { PdfSignDialog: { prototype: { show() {} } } } },
@@ -336,14 +343,19 @@ async function formHandoffTest() {
 async function delayedFormStartupTest() {
   const events = [];
   const parent = {
-    Asc: { editor: { pluginMethod_GetAllForms() {} } },
+    Asc: { editor: { pluginMethod_GetAllForms() {},
+      asc_getPdfProps: vm.runInNewContext("(function(){return null})") } },
     Common: { UI: { warning: () => events.push("error") }, Views: {} },
   };
   const context = {
     Asc: { plugin: { info: { editorType: "word", documentTitle: "form.pdf" } } },
     parent, setTimeout,
     window: { addEventListener() {} },
-    CACDesktop: () => ({ attach: () => events.push("attach"), detach() {} }),
+    CACDesktop: () => {
+      if (!parent.Common.Views.PdfSignDialog)
+        throw new Error("ONLYOFFICE 9.4.0 needs a CAC adapter update.");
+      return { attach: () => events.push("attach"), detach() {} };
+    },
     CACNativeClient: () => ({ call: async () => { events.push("preflight"); return { ok: true }; }, close() {} }),
   };
   vm.runInNewContext(fs.readFileSync(path.join(root, "plugin/standalone-background.js"), "utf8"), context);
@@ -358,6 +370,7 @@ Promise.all([
   formAdapterTest("9.4.0"), formAdapterTest("9.4.0.129"),
   startupTest(false, false), startupTest(true, false), startupTest(false, true),
   startupTest(false, false, { editorType: "word", documentTitle: "form.pdf" }),
+  startupTest(false, false, { editorType: "word", documentTitle: "standard.pdf" }, true),
   formHandoffTest(), delayedFormStartupTest(),
 ])
   .then(() => console.log("PASS: PDF and ONLYOFFICE form clicks, unsaved edits, version guard, startup and cleanup"))

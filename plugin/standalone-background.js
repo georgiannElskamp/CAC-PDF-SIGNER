@@ -84,13 +84,17 @@
       throw new Error("This editor does not expose the native file opener.");
     desktop._openExternalReference(path);
   }
-  async function waitForFormReady() {
+  async function formAdapter() {
+    let lastError;
     for (let attempt = 0; attempt < 120 && !disposed; attempt++) {
-      if (typeof parent.Asc?.editor?.pluginMethod_GetAllForms === "function" &&
-          typeof parent.Common?.Views?.PdfSignDialog?.prototype?.show === "function") return;
+      try { return CACDesktop(parent); }
+      catch (error) {
+        if (!/needs a CAC adapter update/.test(error.message || "")) throw error;
+        lastError = error;
+      }
       await new Promise((resolve) => setTimeout(resolve, 250));
     }
-    throw new Error("The ONLYOFFICE PDF form controls did not load.");
+    throw lastError || new Error("The ONLYOFFICE PDF form controls did not load.");
   }
   Asc.plugin.init = async function () {
     const info = Asc.plugin.info || {};
@@ -99,8 +103,7 @@
     if (initialized || disposed) return;
     initialized = true;
     try {
-      if (formPdf) await waitForFormReady();
-      adapter = CACDesktop(parent);
+      adapter = formPdf ? await formAdapter() : CACDesktop(parent);
       client = CACNativeClient();
       await client.call({ op: "preflight" });
       if (disposed) return;
