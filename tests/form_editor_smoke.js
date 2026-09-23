@@ -35,9 +35,31 @@ async function check(port, packagePath, sourcePath, replacementPath, statePath, 
     await run((guid) => {
       if (!Asc.editor.getUsedBackgroundPlugins().includes(guid)) Asc.editor.asc_pluginRun(guid, 0, "");
     }, GUID);
-    await until(() => run(() => typeof Common !== "undefined" &&
-      /claimed/.test(String(Common.Views?.PdfSignDialog?.prototype?.show))),
-      "The background plugin did not attach to the form signature control.");
+    try {
+      await until(() => run(() => typeof Common !== "undefined" &&
+        /claimed/.test(String(Common.Views?.PdfSignDialog?.prototype?.show))),
+        "The background plugin did not attach to the form signature control.");
+    } catch (error) {
+      const state = await run((guid) => {
+        const frame = document.getElementById("iframe_" + guid);
+        let adapter = "unavailable";
+        if (frame) {
+          try {
+            const probe = frame.contentWindow.CACDesktop(window);
+            probe.detach();
+            adapter = "ready";
+          } catch (cause) { adapter = String(cause.message).slice(0, 160); }
+        }
+        return {
+          frame: !!frame, adapter,
+          dialog: typeof Common === "undefined" ? "unavailable" :
+            typeof Common.Views?.PdfSignDialog?.prototype?.show,
+          used: Asc.editor.getUsedBackgroundPlugins().includes(guid),
+          plugin: frame?.contentWindow?.Asc?.plugin?.info?.editorType || "unavailable",
+        };
+      }, GUID);
+      throw new Error(`${error.message} ${JSON.stringify(state)}`);
+    }
     const health = await run(async (guid) => {
       const frame = document.getElementById("iframe_" + guid);
       const client = frame.contentWindow.CACNativeClient();
