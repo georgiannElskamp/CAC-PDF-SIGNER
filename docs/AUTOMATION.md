@@ -16,6 +16,8 @@ The private [maintenance repository](https://github.com/georgiannElskamp/cac-pdf
 
 The controller accepts same-repository PRs from the maintainer, Dependabot, Codex, the maintenance App, and narrowly scoped editor-pin proposals. It requires the full test matrix, a current base, and a completed Codex review tied to the current commit. A reaction alone is insufficient. Missing evidence, stale reviews, conflicts and cancelled jobs block merging. Tests run again after any correction.
 
+If a cloud task cannot push its correction, it can return a structured patch. The App accepts only a fresh Codex response matching the requested commit and marker, at most five existing text files and 50 KB of JSON. Original file hashes and modes must match; new files, deletions, symlinks and policy paths are rejected. It writes the patch through GitHub without executing it in the private controller. Full tests and a new review remain required. Ambiguous applications stop for inspection.
+
 A failed test or actionable review can request a small correction through the linked maintainer account. There are at most two correction requests per PR. Requests are recorded before posting; an uncertain response is not retried blindly. A request without progress expires after six hours. Codex can decline a task, hit a quota, or lack permission to push; those cases need maintainer attention. No API key or desktop login is copied into CI.
 
 The `automation:no-merge` label holds automatic merging while allowing tests, review and bounded corrections. Remove it only when the PR is ready for research integration.

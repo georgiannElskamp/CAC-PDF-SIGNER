@@ -12,6 +12,7 @@ import pipeline
 import pipeline_policy as policy
 import promote_release as release
 import release_manifest
+import repair_patch
 
 SHA = 'a' * 40
 MAIN = 'b' * 40
@@ -202,3 +203,63 @@ class ApprovedPublicationTests(unittest.TestCase):
         self.assertEqual(release_manifest.resolve(Mock(side_effect=responses), approved), approved)
         responses[1] = {'object':{'type':'commit','sha':MAIN}}
         with self.assertRaises(ValueError): release_manifest.resolve(Mock(side_effect=responses), approved)
+
+
+class RepairPatchTests(unittest.TestCase):
+    def payload(self):
+        return {'schema':1,'base':SHA,'request':'test-marker','files':[{'path':'tests/probe.py',
+            'beforeSha256':hashlib.sha256(b'old\n').hexdigest(),'content':'new\n'}]}
+
+    def parse(self, value):
+        return repair_patch.parse('<cac-repair-patch>'+json.dumps(value)+'</cac-repair-patch>',SHA,'test-marker')
+
+    def test_matching_existing_text_replacement_is_bounded(self):
+        files=self.parse(self.payload())
+        self.assertEqual(repair_patch.replacement(files[0],'old\n','100644')['content'],'new\n')
+        for mode in ('120000','160000',None):
+            with self.assertRaises(ValueError): repair_patch.replacement(files[0],'old\n',mode)
+        with self.assertRaises(ValueError): repair_patch.replacement(files[0],'changed\n','100644')
+
+    def test_wrong_request_policy_paths_and_binary_text_are_rejected(self):
+        changes=[lambda p:p.update(base=MAIN),lambda p:p.update(request='other'),lambda p:p.update(files=[]),
+            lambda p:p.update(files=p['files']*6),lambda p:p['files'][0].update(content='a'*50001),
+            lambda p:p['files'][0].update(content='bad'+chr(0))]
+        for path in ('../escape.py','/absolute.py','.github/workflows/run.yml','automation/controller/pipeline.py',
+                     'tools/promote_release.py','tests/test_pipeline.py','image.png','a//b.py'):
+            changes.append(lambda p,path=path:p['files'][0].update(path=path))
+        for change in changes:
+            value=self.payload();change(value)
+            with self.assertRaises(ValueError):self.parse(value)
+
+    def test_duplicate_json_properties_and_ambiguous_blocks_are_rejected(self):
+        value=json.dumps(self.payload())
+        with self.assertRaises(ValueError):
+            repair_patch.parse('<cac-repair-patch>'+value.replace('"schema": 1','"schema": 1, "schema": 1')+'</cac-repair-patch>',SHA,'test-marker')
+        block='<cac-repair-patch>'+value+'</cac-repair-patch>'
+        with self.assertRaises(ValueError):repair_patch.parse(block+block,SHA,'test-marker')
+        self.assertIsNone(repair_patch.parse('A cloud task summary without a patch',SHA,'test-marker'))
+
+    def test_controller_applies_only_the_pinned_text_to_a_live_temporary_branch(self):
+        reply={'id':7,'user':{'login':policy.CODEX},'created_at':STAMP,
+            'body':'<cac-repair-patch>'+json.dumps(self.payload())+'</cac-repair-patch>'}
+        record={'repair':{'created_at':STAMP,'marker':'test-marker'}}
+        state=Mock()
+        def api(path,method='GET',body=None):
+            if path.endswith('/git/commits/'+SHA):return {'tree':{'sha':'original-tree'}}
+            if path.endswith('/git/trees/original-tree?recursive=1'):return {'truncated':False,'tree':[{'path':'tests/probe.py','mode':'100644','type':'blob'}]}
+            if path.endswith('/pulls/123'):return pull()
+            if method=='POST' and path.endswith('/git/trees'):
+                self.assertEqual(body['tree'],[{'path':'tests/probe.py','mode':'100644','type':'blob','content':'new\n'}])
+                return {'sha':'updated-tree'}
+            if method=='POST' and path.endswith('/git/commits'):
+                self.assertEqual(body['parents'],[SHA]);return {'sha':MAIN}
+            if method=='PATCH' and path.endswith('/git/refs/heads/change'):
+                self.assertEqual(body,{'sha':MAIN,'force':False});return {}
+            self.fail(path)
+        with patch.object(pipeline,'pages',return_value=[reply]),patch.object(pipeline,'text_file',return_value='old\n'),patch.object(pipeline,'api',side_effect=api):
+            self.assertTrue(pipeline.apply_repair(state,record,pull()))
+        self.assertEqual(record['patch']['state'],'applied')
+        self.assertEqual(state.save.call_count,2)
+        with patch.object(pipeline,'api') as request:
+            with self.assertRaises(RuntimeError):pipeline.apply_repair(state,record,pull())
+            request.assert_not_called()
