@@ -259,10 +259,12 @@ async function startupTest(fail, unload, info = { editorType: "pdf" }) {
   const pending = new Promise((ok, no) => { resolve = ok; reject = no; });
   const context = {
     Asc: { plugin: { info } },
+    setTimeout,
     window: { addEventListener: (name, fn) => { handlers[name] = fn; } },
     parent: {
       Asc: { editor: { pluginMethod_GetAllForms() {} } },
-      Common: { UI: { warning: () => events.push("error") } },
+      Common: { UI: { warning: () => events.push("error") },
+        Views: { PdfSignDialog: { prototype: { show() {} } } } },
     },
     CACNativeClient: () => ({ call: (request) => {
       assert.equal(request.op, "preflight");
@@ -287,12 +289,14 @@ async function formHandoffTest() {
   const requests = [], warnings = [], opened = [];
   const context = {
     Asc: { plugin: { info: { editorType: "word", documentTitle: "form.pdf" } } },
+    setTimeout,
     window: { addEventListener() {} },
     btoa: (value) => Buffer.from(value, "binary").toString("base64"),
     parent: {
       Asc: { editor: { pluginMethod_GetAllForms() {} } },
       AscDesktopEditor: { _openExternalReference: (path) => opened.push(path) },
-      Common: { UI: { warning: (message) => warnings.push(message) } },
+      Common: { UI: { warning: (message) => warnings.push(message) },
+        Views: { PdfSignDialog: { prototype: { show() {} } } } },
     },
     CACDesktop: () => ({
       snapshot: () => ({ kind: "onlyoffice-form", bytes: Buffer.from("%PDF-review"),
@@ -329,11 +333,32 @@ async function formHandoffTest() {
   assert.equal(warnings.length, 1);
   assert.deepEqual(opened, ["C:\\review.pdf"]);
 }
+async function delayedFormStartupTest() {
+  const events = [];
+  const parent = {
+    Asc: { editor: { pluginMethod_GetAllForms() {} } },
+    Common: { UI: { warning: () => events.push("error") }, Views: {} },
+  };
+  const context = {
+    Asc: { plugin: { info: { editorType: "word", documentTitle: "form.pdf" } } },
+    parent, setTimeout,
+    window: { addEventListener() {} },
+    CACDesktop: () => ({ attach: () => events.push("attach"), detach() {} }),
+    CACNativeClient: () => ({ call: async () => { events.push("preflight"); return { ok: true }; }, close() {} }),
+  };
+  vm.runInNewContext(fs.readFileSync(path.join(root, "plugin/standalone-background.js"), "utf8"), context);
+  const started = context.Asc.plugin.init();
+  await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.deepEqual(events, []);
+  parent.Common.Views.PdfSignDialog = { prototype: { show() {} } };
+  await started;
+  assert.deepEqual(events, ["preflight", "attach"]);
+}
 Promise.all([
   formAdapterTest("9.4.0"), formAdapterTest("9.4.0.129"),
   startupTest(false, false), startupTest(true, false), startupTest(false, true),
   startupTest(false, false, { editorType: "word", documentTitle: "form.pdf" }),
-  formHandoffTest(),
+  formHandoffTest(), delayedFormStartupTest(),
 ])
   .then(() => console.log("PASS: PDF and ONLYOFFICE form clicks, unsaved edits, version guard, startup and cleanup"))
   .catch(error => { console.error(error); process.exitCode = 1; });

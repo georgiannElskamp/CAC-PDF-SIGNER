@@ -35,7 +35,8 @@ async function check(port, packagePath, sourcePath, replacementPath, statePath, 
     await run((guid) => {
       if (!Asc.editor.getUsedBackgroundPlugins().includes(guid)) Asc.editor.asc_pluginRun(guid, 0, "");
     }, GUID);
-    await until(() => run(() => /claimed/.test(String(Common.Views.PdfSignDialog.prototype.show))),
+    await until(() => run(() => typeof Common !== "undefined" &&
+      /claimed/.test(String(Common.Views?.PdfSignDialog?.prototype?.show))),
       "The background plugin did not attach to the form signature control.");
     const health = await run(async (guid) => {
       const frame = document.getElementById("iframe_" + guid);
