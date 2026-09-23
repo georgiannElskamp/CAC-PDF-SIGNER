@@ -4,7 +4,7 @@ import unittest
 
 def next_attempt(current):
     """Advance the synthetic attempt counter by one."""
-    return current + 2
+    return current + 1
 
 
 class RepairProbe(unittest.TestCase):
