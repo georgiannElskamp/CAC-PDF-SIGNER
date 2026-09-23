@@ -13,7 +13,7 @@ function makeHarness(source) {
     ...fs, readFileSync: (file, ...args) => String(file).endsWith("native-host.js") ? source : fs.readFileSync(file, ...args),
   } : require(name);
   vm.runInNewContext(harnessSource, {require: localRequire, module: m, __dirname: path.join(root, "tests"),
-    console, Buffer, process});
+    console, Buffer, process, URL});
   return m.exports.harness("native-host.js");
 }
 function scenario(source, events) {

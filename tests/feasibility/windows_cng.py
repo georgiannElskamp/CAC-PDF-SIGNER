@@ -20,11 +20,11 @@ from pyhanko.pdf_utils.reader import PdfFileReader
 
 hosted()
 package=Path(os.environ["PROBE_INPUT"])/"CAC-PDF-Signer.plugin"
-ps=["powershell","-NoProfile","-NonInteractive","-Command"]
+ps=["pwsh","-NoProfile","-NonInteractive","-Command"]
 thumbprint=None
 try:
     certificate=json.loads(subprocess.check_output(ps+[
-        "$c=New-SelfSignedCertificate -Type Custom -Subject 'CN=SOFTWARE.TEST.0000000000,OU=DoD,O=Synthetic feasibility test' "
+        "$ErrorActionPreference='Stop'; Import-Module Microsoft.PowerShell.Security; $c=New-SelfSignedCertificate -Type Custom -Subject 'CN=SOFTWARE.TEST.0000000000,OU=DoD,O=Synthetic feasibility test' "
         "-CertStoreLocation Cert:\\CurrentUser\\My -Provider 'Microsoft Software Key Storage Provider' "
         "-KeyAlgorithm RSA -KeyLength 2048 -HashAlgorithm SHA256 -KeyExportPolicy NonExportable "
         "-KeyUsage DigitalSignature,NonRepudiation -NotAfter (Get-Date).AddDays(1); "
@@ -33,7 +33,7 @@ try:
     thumbprint=certificate["thumbprint"]
     with tempfile.TemporaryDirectory(prefix="cac-cng-probe-") as temp:
         work=Path(temp)
-        extracted=extract(package,work/"Example User Ã©")
+        extracted=extract(package,work/"Example User ÃƒÆ’Ã‚Â©")
         candidates=list((extracted/"native").rglob("pdfsign-bridge.exe"))
         assert len(candidates)==1, "Packaged bridge missing or ambiguous"
         bridge=candidates[0]
@@ -78,5 +78,5 @@ except Exception as error:
     raise
 finally:
     if thumbprint:
-        subprocess.run(ps+["Remove-Item -LiteralPath ('Cert:\\CurrentUser\\My\\' + '"+thumbprint+"') -DeleteKey -ErrorAction Stop"],
+        subprocess.run(ps+["Import-Module Microsoft.PowerShell.Security; Remove-Item -LiteralPath ('Cert:\\CurrentUser\\My\\' + '"+thumbprint+"') -DeleteKey -ErrorAction Stop"],
                        check=True,timeout=30)

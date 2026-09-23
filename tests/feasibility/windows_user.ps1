@@ -1,6 +1,6 @@
 $ErrorActionPreference='Stop'
 if($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted'){throw 'Disposable hosted runner required'}
-$accountName='CAC Probe é'
+$accountName='CAC Probe Ã©'
 $password=[Guid]::NewGuid().ToString('N')+'aA!7'
 $secure=ConvertTo-SecureString $password -AsPlainText -Force
 $password=$null
@@ -8,7 +8,7 @@ $user=New-LocalUser -Name $accountName -Password $secure -PasswordNeverExpires
 $group=Get-LocalGroup -SID 'S-1-5-32-545'
 Add-LocalGroupMember -Group $group -Member $user
 $credential=[PSCredential]::new(($env:COMPUTERNAME+'\'+$accountName),$secure)
-$shared=Join-Path $env:RUNNER_TEMP 'CAC feasibility é'
+$shared=Join-Path $env:RUNNER_TEMP 'CAC feasibility Ã©'
 New-Item -ItemType Directory -Path $shared -Force | Out-Null
 $report=Join-Path $shared 'report'
 New-Item -ItemType Directory -Path $report -Force | Out-Null
@@ -17,7 +17,7 @@ $acl=Get-Acl -LiteralPath $shared
 $acl.AddAccessRule($rule)
 Set-Acl -LiteralPath $shared -AclObject $acl
 foreach($readPath in @($env:PROBE_INPUT,$env:GITHUB_WORKSPACE)){
-    & icacls $readPath /grant ($user.SID.Value+':(OI)(CI)RX') /T /Q | Out-Null
+    & icacls $readPath /grant ('*'+$user.SID.Value+':(OI)(CI)RX') /T /Q | Out-Null
     if($LASTEXITCODE -ne 0){throw 'Could not grant fixture access'}
 }
 $python=(Get-Command python).Source
