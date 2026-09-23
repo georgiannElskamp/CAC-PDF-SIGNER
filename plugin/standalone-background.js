@@ -72,7 +72,10 @@
   }
   Asc.plugin.init = async function () {
     const info = Asc.plugin.info || {};
-    if (info.editorType && info.editorType !== "pdf" && info.editorSubType !== "pdf") return;
+    const formPdf = info.editorType === "word" &&
+      /\.pdf$/i.test(info.documentTitle || "") &&
+      typeof parent.Asc?.editor?.pluginMethod_GetAllForms === "function";
+    if (info.editorType && info.editorType !== "pdf" && info.editorSubType !== "pdf" && !formPdf) return;
     if (initialized || disposed) return;
     initialized = true;
     try {

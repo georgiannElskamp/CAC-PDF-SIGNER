@@ -175,14 +175,17 @@ function formAdapterTest() {
   assert.equal(callbacks.asc_onShowContentControlsActions, undefined);
 }
 formAdapterTest();
-async function startupTest(fail, unload) {
+async function startupTest(fail, unload, info = { editorType: "pdf" }) {
   const events = [], handlers = {};
   let resolve, reject;
   const pending = new Promise((ok, no) => { resolve = ok; reject = no; });
   const context = {
-    Asc: { plugin: { info: { editorType: "pdf" } } },
+    Asc: { plugin: { info } },
     window: { addEventListener: (name, fn) => { handlers[name] = fn; } },
-    parent: { Common: { UI: { warning: () => events.push("error") } } },
+    parent: {
+      Asc: { editor: { pluginMethod_GetAllForms() {} } },
+      Common: { UI: { warning: () => events.push("error") } },
+    },
     CACNativeClient: () => ({ call: (request) => {
       assert.equal(request.op, "preflight");
       events.push("preflight"); return pending;
@@ -198,6 +201,9 @@ async function startupTest(fail, unload) {
   await started;
   assert.deepEqual(events, unload ? ["preflight", "detach", "close"] : ["preflight", fail ? "error" : "attach"]);
 }
-Promise.all([startupTest(false, false), startupTest(true, false), startupTest(false, true)])
+Promise.all([
+  startupTest(false, false), startupTest(true, false), startupTest(false, true),
+  startupTest(false, false, { editorType: "word", documentTitle: "form.pdf" }),
+])
   .then(() => console.log("PASS: PDF and ONLYOFFICE form clicks, unsaved edits, version guard, startup and cleanup"))
   .catch(error => { console.error(error); process.exitCode = 1; });
