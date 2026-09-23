@@ -11,4 +11,4 @@ test -S /run/pcscd/pcscd.comm
 runuser -u tester -- env HOME='/test/profile/Example User é' XDG_RUNTIME_DIR=/test/state \
     SOFTHSM2_CONF=/test/state/softhsm.conf PROBE_REPORT=/evidence PROBE_INPUT=/input \
     GITHUB_ACTIONS=true RUNNER_ENVIRONMENT=github-hosted \
-    dbus-run-session -- xvfb-run -a -s '-screen 0 1280x1024x24' bash tests/feasibility/virtual_session.sh
+    dbus-run-session -- xvfb-run -a -s '-screen 0 1280x1024x24' bash tests/qualification/virtual_session.sh

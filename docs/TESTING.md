@@ -91,3 +91,7 @@ Run `python -B tools/publish_release.py` to check a newly prepared package. Reco
 Publishing pushes the commit and version tag, uploads a draft release and dispatches the release workflow. GitHub runs Windows/Linux source tests, executes both uploaded native workers, tests installation and simulated Linux signing, and checks the package against the tagged source before requesting maintainer approval. Versions containing a hyphen are initially published as prereleases. A failed workflow leaves the release in draft. A validated candidate can subsequently be promoted in GitHub without changing its tag or assets.
 
 To retry an uploaded draft after a workflow failure, run **Actions > Publish release > Run workflow** with the same tag. Rebuild and use a new version if the source or package changes.
+
+## Required candidate qualification
+
+Research PRs and research/release-verification snapshots run the same full build and qualification matrix. Extended probes live in `tests/qualification`. Windows CNG uses a disposable software certificate; Linux virtual CAC tests use synthetic card data and the bundled OpenSC path. Neither proves physical-card compatibility. Windows standard-user profile initialization remains a recorded diagnostic limit outside the required matrix. The release PR links the exact candidate and its reports; publication promotes those bytes after maintainer approval. See [GitHub maintenance](AUTOMATION.md).

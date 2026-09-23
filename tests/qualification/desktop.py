@@ -58,7 +58,7 @@ def check():
                 child=subprocess.Popen([str(editor),"--remote-debugging-port=9251",str(pdf)],cwd=editor.parent,
                                        env=environment,stdout=log,stderr=log,**options)
                 try:
-                    result=subprocess.run([node,str(ROOT/"tests/feasibility/desktop.js"),mode,"9251",
+                    result=subprocess.run([node,str(ROOT/"tests/qualification/desktop.js"),mode,"9251",
                         str(Path(os.environ["PROBE_INPUT"])/"CAC-PDF-Signer.plugin"),str(REPORT)],timeout=300)
                     outcomes.append({"mode":mode,"exitCode":result.returncode})
                 finally:

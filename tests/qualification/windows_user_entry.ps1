@@ -15,5 +15,5 @@ $env:TEMP=Join-Path $env:LOCALAPPDATA 'Temp'
 $env:TMP=$env:TEMP
 New-Item -ItemType Directory -Path $env:TEMP -Force | Out-Null
 Set-Location -LiteralPath $Root
-& $PythonPath -B tests/feasibility/desktop.py --installed
+& $PythonPath -B tests/qualification/desktop.py --installed
 exit $LASTEXITCODE

@@ -34,4 +34,4 @@ export PROBE_CARD_PID="$card_pid"
 sleep 2
 pkcs11-tool --list-objects --type cert > control.txt
 cd /repo
-python3 -B tests/feasibility/virtual_probe.py
+python3 -B tests/qualification/virtual_probe.py

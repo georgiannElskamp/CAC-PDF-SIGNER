@@ -2,7 +2,7 @@
 
 Run commands from the repository root. Keep Python environments, native build directories and generated packages outside the checkout. End users install the finished `.plugin` file and do not need these tools.
 
-For a build that needs no local toolchain, use GitHub's **Build candidate** workflow. It builds both workers, validates the package, and provides the installable artifact. **Prepare release draft** carries a successful candidate into the approval-gated release workflow. See [GitHub maintenance](AUTOMATION.md#build-and-release-from-github).
+For a build that needs no local toolchain, use GitHub's **Build candidate** workflow. It builds both workers, validates the package, and provides the installable artifact. The `release-verification` PR carries a frozen candidate to the maintainer for approval; merging it into `main` publishes those exact bytes. See [GitHub maintenance](AUTOMATION.md#build-and-release-from-github).
 
 ## Windows worker and combined package
 

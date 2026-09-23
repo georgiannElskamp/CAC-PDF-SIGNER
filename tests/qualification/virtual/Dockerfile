@@ -10,4 +10,4 @@ RUN git clone https://github.com/Jakuje/virt_cacard.git /opt/virt-source \
     && ./autogen.sh && ./configure && make -j2 && make install
 RUN useradd --uid 1000 --home-dir /test/profile --create-home tester
 WORKDIR /repo
-CMD ["bash","tests/feasibility/virtual_start.sh"]
+CMD ["bash","tests/qualification/virtual_start.sh"]

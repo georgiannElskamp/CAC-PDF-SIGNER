@@ -12,14 +12,14 @@ for file in sorted(root.rglob("*.json")):
         data={"status":"malformed","file":str(file.relative_to(root))}
     reports.append({"file":str(file.relative_to(root)),"result":data})
 jobs=json.loads(os.environ["PROBE_JOBS"])
-report={"purpose":"Release-test feasibility evidence; not release approval",
+report={"purpose":"Automated candidate qualification; hardware and diagnostic limits remain explicit",
         "testCommit":os.environ["GITHUB_SHA"],"run":os.environ["GITHUB_RUN_ID"],
         "jobs":jobs,"reports":reports,
-        "allSelectedJobsPassed":all(v["result"] in ("success","skipped") for v in jobs.values())}
+        "allRequiredJobsPassed":all(v["result"] == "success" for v in jobs.values())}
 target=Path(sys.argv[2])
 target.write_text(json.dumps(report,indent=2),encoding="utf-8")
 print(json.dumps({"jobs":{k:v["result"] for k,v in jobs.items()},"reportCount":len(reports)}))
 with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as out:
-    out.write("## Release-test feasibility\n\n")
-    out.write("This run does not publish or qualify a release. Failed and missing probes remain visible.\n\n")
+    out.write("## Candidate qualification\n\n")
+    out.write("This report does not authorize publication. Failed, missing and diagnostic results remain visible.\n\n")
     for name,value in jobs.items():out.write(f"- {name}: {value['result']}\n")

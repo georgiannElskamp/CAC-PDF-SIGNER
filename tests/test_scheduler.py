@@ -37,6 +37,7 @@ class SchedulerTests(unittest.TestCase):
             return approved if path.endswith("approved-plugin.json") else {"version": "9.4.0"}
         with patch.object(scheduler, "api", side_effect=request), \
              patch.object(scheduler, "public_file", side_effect=file), \
+             patch.object(scheduler, "resolve_plugin", side_effect=lambda api, value: value), \
              patch.object(scheduler, "load_state", return_value=(state, "sha")), \
              patch.object(scheduler, "save_state"):
             scheduler.watch()
@@ -58,6 +59,7 @@ class SchedulerTests(unittest.TestCase):
             return {"sha256": "b" * 64} if path.endswith("approved-plugin.json") else {"version": "9.4.0"}
         with patch.object(scheduler, "api", side_effect=request), \
              patch.object(scheduler, "public_file", side_effect=file), \
+             patch.object(scheduler, "resolve_plugin", side_effect=lambda api, value: value), \
              patch.object(scheduler, "load_state", return_value=(state, "sha")), \
              patch.object(scheduler, "save_state", side_effect=lambda value: saved.append(json.loads(json.dumps(value)))):
             with self.assertRaises(TimeoutError):

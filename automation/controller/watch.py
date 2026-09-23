@@ -9,6 +9,7 @@ import os
 import re
 import urllib.error
 import urllib.request
+from release_manifest import resolve as resolve_plugin
 
 PUBLIC = "georgiannElskamp/CAC-PDF-SIGNER"
 UPSTREAM = "ONLYOFFICE/DesktopEditors"
@@ -110,8 +111,11 @@ def reconcile(state):
 def watch(force=False):
     state, _ = load_state()
     reconcile(state)
-    commit = api(f"/repos/{PUBLIC}/commits/main", anonymous=True)["sha"]
-    approved = public_file("tests/approved-plugin.json", commit)
+    branch = os.environ.get("HARNESS_BRANCH", "main")
+    if branch not in {"main", "research"}:
+        raise ValueError("Unsupported harness branch")
+    commit = api(f"/repos/{PUBLIC}/commits/{branch}", anonymous=True)["sha"]
+    approved = resolve_plugin(lambda path: api(path, anonymous=True), public_file("tests/approved-plugin.json", commit))
     baseline = tuple(map(int, public_file("tests/editor-installers.json", commit)["version"].split(".")))
     releases, page = [], 1
     while True:
@@ -144,7 +148,7 @@ def watch(force=False):
         state["records"][key] = {"status": "dispatching", "tag": tag, "requestedAt": now(), "harness": commit}
         save_state(state)
         response = api(f"/repos/{PUBLIC}/actions/workflows/compatibility-test.yml/dispatches", "POST",
-                       {"ref": "main", "inputs": {"editor_tag": tag, "request_id": key}}, dispatch=True)
+                       {"ref": branch, "inputs": {"editor_tag": tag, "request_id": key}}, dispatch=True)
         if response and response.get("workflow_run_id"):
             state["records"][key]["runId"] = response["workflow_run_id"]
         state["records"][key]["status"] = "pending"
@@ -152,7 +156,7 @@ def watch(force=False):
         dispatched += 1
     state["lastSuccessfulPoll"] = now()
     if stale(state.get("lastComponentDispatch"), 168):
-        api(f"/repos/{PUBLIC}/actions/workflows/component-watch.yml/dispatches", "POST", {"ref": "main"}, dispatch=True)
+        api(f"/repos/{PUBLIC}/actions/workflows/component-watch.yml/dispatches", "POST", {"ref": branch}, dispatch=True)
         state["lastComponentDispatch"] = now()
     save_state(state)
     print(f"Dispatched {dispatched}; waiting for assets: {len(state['pendingAssets'])}")

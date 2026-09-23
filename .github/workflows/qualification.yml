@@ -1,8 +1,6 @@
-name: Release test feasibility
+name: Extended qualification
 on:
-  push:
-    branches: [test/release-verification-feasibility]
-    paths: ['tests/feasibility/**', '.github/workflows/feasibility.yml']
+  workflow_call:
 permissions:
   contents: read
   actions: read
@@ -10,7 +8,6 @@ env:
   PYTHONDONTWRITEBYTECODE: '1'
 jobs:
   core:
-    if: contains(github.event.head_commit.message, '[probe:all]') || contains(github.event.head_commit.message, '[probe:core]')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
@@ -30,23 +27,23 @@ jobs:
       - name: Check bounded lifecycle orderings and known defects
         id: lifecycle
         continue-on-error: true
-        run: node tests/feasibility/lifecycle.js
+        run: node tests/qualification/lifecycle.js
       - name: Check synthetic PDF corpus and render controls
         id: pdf
         continue-on-error: true
-        run: python -B tests/feasibility/pdf_corpus.py
+        run: python -B tests/qualification/pdf_corpus.py
       - name: Check destination failures and retained recovery
         id: save
         continue-on-error: true
-        run: python -B tests/feasibility/save_faults.py
+        run: python -B tests/qualification/save_faults.py
       - name: Check evidence policy failure controls
         id: gate
         continue-on-error: true
-        run: python -B tests/feasibility/gate.py
+        run: python -B tests/qualification/gate.py
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: feasibility-core
+          name: qualification-core
           path: ${{ env.PROBE_REPORT }}
           retention-days: 30
           if-no-files-found: error
@@ -59,7 +56,6 @@ jobs:
           GATE: ${{ steps.gate.outcome }}
         run: test "$LIFECYCLE" = success && test "$PDF" = success && test "$SAVE" = success && test "$GATE" = success
   windows:
-    if: contains(github.event.head_commit.message, '[probe:all]') || contains(github.event.head_commit.message, '[probe:windows]')
     runs-on: windows-2025
     timeout-minutes: 20
     steps:
@@ -73,24 +69,46 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with: {python-version: '3.11'}
       - run: python -m pip install -r requirements-dev.txt
-      - name: Retrieve the unchanged tested candidate
-        env: {GH_TOKEN: '${{ github.token }}'}
-        run: python -B tests/feasibility/common.py
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: candidate
+          path: ${{ env.PROBE_INPUT }}
+      - name: Verify candidate identity
+        run: python -B tests/qualification/common.py
       - name: Exercise real CNG and independent PDF verification
-        run: python -B tests/feasibility/windows_cng.py
+        run: python -B tests/qualification/windows_cng.py
+      - name: Probe standard-user desktop coverage (diagnostic)
+        id: standard-user
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          python -B tests/qualification/desktop.py --install-only
+          if($LASTEXITCODE -ne 0){exit $LASTEXITCODE}
+          ./tests/qualification/windows_user.ps1
+      - name: Record diagnostic outcome
+        if: always()
+        shell: python
+        env:
+          OUTCOME: ${{ steps.standard-user.outcome }}
+        run: |
+          import json, os
+          from pathlib import Path
+          Path(os.environ['PROBE_REPORT']).mkdir(parents=True, exist_ok=True)
+          (Path(os.environ['PROBE_REPORT'])/'windows-standard-user-coverage.json').write_text(json.dumps({
+            'status':os.environ['OUTCOME'], 'required':False,
+            'scope':'Diagnostic only: hosted Windows standard-user profile setup remains outside the qualified matrix.'}),encoding='utf-8')
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: feasibility-windows-cng
+          name: qualification-windows-cng
           path: ${{ env.PROBE_REPORT }}
           retention-days: 30
           if-no-files-found: error
   desktop:
-    if: contains(github.event.head_commit.message, '[probe:all]') || contains(github.event.head_commit.message, '[probe:desktop]') || contains(github.event.head_commit.message, '[probe:desktop-windows]')
     strategy:
       fail-fast: false
       matrix:
-        os: ${{ contains(github.event.head_commit.message, '[probe:desktop-windows]') && fromJSON('["windows-2025", "windows-2022"]') || fromJSON('["windows-2025", "ubuntu-24.04"]') }}
+        os: [ubuntu-24.04]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -105,31 +123,26 @@ jobs:
         with: {python-version: '3.11'}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with: {node-version: '22'}
-      - name: Retrieve the unchanged tested candidate
-        env: {GH_TOKEN: '${{ github.token }}'}
-        run: python -B tests/feasibility/common.py
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: candidate
+          path: ${{ env.PROBE_INPUT }}
+      - name: Verify candidate identity
+        run: python -B tests/qualification/common.py
       - name: Prepare Linux display
         if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y xvfb xauth libgbm1
       - name: Test Linux UI enablement, repeated workers and restart
         if: runner.os == 'Linux'
-        run: xvfb-run -a python -B tests/feasibility/desktop.py
-      - name: Install the Windows editor
-        if: runner.os == 'Windows'
-        run: python -B tests/feasibility/desktop.py --install-only
-      - name: Test Windows from a real standard-user account
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ./tests/feasibility/windows_user.ps1
+        run: xvfb-run -a python -B tests/qualification/desktop.py
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: feasibility-desktop-${{ matrix.os }}
+          name: qualification-desktop-${{ matrix.os }}
           path: ${{ env.PROBE_REPORT }}
           retention-days: 30
           if-no-files-found: error
   virtual:
-    if: contains(github.event.head_commit.message, '[probe:all]') || contains(github.event.head_commit.message, '[probe:virtual]')
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -142,34 +155,35 @@ jobs:
           echo "PROBE_INPUT=$RUNNER_TEMP/probe-input" >> "$GITHUB_ENV"
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
         with: {python-version: '3.11'}
-      - name: Retrieve the unchanged tested candidate
-        env: {GH_TOKEN: '${{ github.token }}'}
-        run: python -B tests/feasibility/common.py
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          name: candidate
+          path: ${{ env.PROBE_INPUT }}
+      - name: Verify candidate identity
+        run: python -B tests/qualification/common.py
       - name: Build virtual CAC test environment
-        run: docker build --pull -f tests/feasibility/virtual/Dockerfile -t cac-virtual-feasibility .
+        run: docker build --pull -f tests/qualification/virtual/Dockerfile -t cac-virtual-qualification .
       - name: Exercise bundled OpenSC with virtual card removal and reinsertion
         run: |
           docker run --rm --shm-size=1g -e GITHUB_SHA -e GITHUB_RUN_ID -e GITHUB_ACTIONS=true -e RUNNER_ENVIRONMENT=github-hosted \
             --mount "type=bind,src=$GITHUB_WORKSPACE,dst=/repo,readonly" \
             --mount "type=bind,src=$PROBE_INPUT,dst=/input,readonly" \
-            --mount "type=bind,src=$PROBE_REPORT,dst=/evidence" cac-virtual-feasibility
+            --mount "type=bind,src=$PROBE_REPORT,dst=/evidence" cac-virtual-qualification
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: feasibility-virtual
+          name: qualification-virtual
           path: ${{ env.PROBE_REPORT }}
           retention-days: 30
           if-no-files-found: error
   evidence:
-    if: always() && !cancelled()
+    if: always()
     needs: [core, windows, desktop, virtual]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
       actions: read
-      id-token: write
-      attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with: {persist-credentials: false}
@@ -180,31 +194,23 @@ jobs:
           echo "PROBE_INPUT=$RUNNER_TEMP/probe-input" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
-          pattern: feasibility-*
+          pattern: qualification-*
           path: ${{ runner.temp }}/evidence
       - name: Record all outcomes
         env:
           PROBE_JOBS: ${{ toJSON(needs) }}
-        run: python -B tests/feasibility/collect.py "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/feasibility-evidence.json"
-      - name: Attest this feasibility report
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4
-        with:
-          subject-path: ${{ runner.temp }}/feasibility-evidence.json
-      - name: Verify evidence origin and reject altered bytes
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          gh attestation verify "$RUNNER_TEMP/feasibility-evidence.json" --repo "$GITHUB_REPOSITORY"
-          cp "$RUNNER_TEMP/feasibility-evidence.json" "$RUNNER_TEMP/altered-evidence.json"
-          echo 'tampered' >> "$RUNNER_TEMP/altered-evidence.json"
-          if gh attestation verify "$RUNNER_TEMP/altered-evidence.json" --repo "$GITHUB_REPOSITORY"; then
-            echo 'Attestation accepted altered bytes'
-            exit 1
-          fi
+        run: python -B tests/qualification/collect.py "$RUNNER_TEMP/evidence" "$RUNNER_TEMP/qualification-evidence.json"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
         if: always()
         with:
-          name: feasibility-evidence
-          path: ${{ runner.temp }}/feasibility-evidence.json
+          name: qualification-evidence
+          path: ${{ runner.temp }}/qualification-evidence.json
           retention-days: 30
           if-no-files-found: error
+      - name: Require every qualification lane
+        env:
+          CORE: ${{ needs.core.result }}
+          WINDOWS: ${{ needs.windows.result }}
+          DESKTOP: ${{ needs.desktop.result }}
+          VIRTUAL: ${{ needs.virtual.result }}
+        run: test "$CORE" = success && test "$WINDOWS" = success && test "$DESKTOP" = success && test "$VIRTUAL" = success

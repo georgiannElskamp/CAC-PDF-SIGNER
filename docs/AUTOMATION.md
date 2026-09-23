@@ -1,54 +1,63 @@
 # GitHub maintenance
 
-All scheduled work runs on GitHub-hosted runners. No desktop automation, WSL installation or self-hosted runner is required.
+All recurring work runs on GitHub-hosted runners and Codex cloud. The desktop can remain off. There are three permanent branches; short-lived PR branches are removed after merging.
 
-## Workflows
-
-| Workflow | Trigger | Result |
+| Branch | Purpose | Promotion |
 | --- | --- | --- |
-| ONLYOFFICE compatibility | Scheduler or manual | Tests the approved plugin, updates one issue per editor release and proposes a draft editor-pin PR when appropriate |
-| Checks | Push, PR or manual | Python and JavaScript regression tests on Windows and Linux |
-| Dependency review | PR | Rejects newly introduced high/critical dependency vulnerabilities |
-| Runtime change validation | PR | Requires a full candidate build and GUI checks when shipped code, runtime dependencies or build inputs change |
-| Bundled component watch | Weekly scheduler dispatch or manual | Reports custom native version changes, recent upstream advisory feeds and a component inventory |
-| Build candidate | Manual | Builds both workers, packages one plugin and validates installation and simulated signing |
-| Prepare release draft | Manual, successful candidate run ID | Stages the exact tested bytes under a new version and starts release checks |
-| Publish release | Manual dispatch from draft preparation | Rechecks the draft and waits for maintainer approval before publication |
-| Diagnose compatibility failure | Manual, optional API setup | Produces a read-only Codex investigation report on a hosted Linux runner |
+| `research` | Integrates changes after source, dependency, full-package and extended qualification checks | Eligible PRs merge only after a fresh Codex review of the same commit |
+| `release-verification` | Freezes a passing research snapshot, assigns its version, and builds the installable candidate | An App-authored PR waits for the maintainer's approval and manual merge |
+| `main` | Accepted release source | Publishes the exact tested candidate after checking the approval, merge, source tree and package digest |
 
-Dependabot proposes weekly Python and GitHub Actions updates. Native version reports are advisory; they do not replace runtime pins or regenerate license notices automatically.
+Research builds create temporary internal packages because installation/signing tests need real binaries. They do not create GitHub releases. Verification candidates include `CAC-PDF-Signer.plugin`, SHA256SUMS, install notes, source metadata and a CycloneDX inventory. Download them from the build linked in the release PR.
 
-The private [scheduler](https://github.com/georgiannElskamp/cac-pdf-signer-automation) polls daily and checks its own health in a separate workflow. Install the scheduler App and configure its credentials before enabling it. See its README for setup. The public repository does not need a recurring schedule or artificial keepalive commits. The private jobs use its included Actions allowance; standard public jobs run the heavier tests. Schedules are best effort, and the GitHub health check cannot independently detect an outage of all GitHub scheduling.
+## Research controller
 
-Run **Actions > ONLYOFFICE compatibility > Run workflow** to test a stable editor tag such as `v9.4.0`. Leave the discovery fingerprint blank for a manual run. The workflow downloads the unchanged asset pinned in `tests/approved-plugin.json`; the package audit uses its immutable source commit. Candidate installer checksums come from official release metadata. Missing assets, mismatched hashes and incomplete results fail closed.
+The private [maintenance repository](https://github.com/georgiannElskamp/cac-pdf-signer-automation) checks research PRs twice an hour. Scheduling is best effort. `PIPELINE_ENABLED=false` disables scheduled processing; manual runs default to dry-run. `AUTOMATION_ENABLED` independently controls daily editor discovery. Both controllers retain progress on the private `state` branch.
 
-Windows and Linux checks install the editor, confirm Background plugins, start the worker, remove the plugin and reinstall it. The Debian 12 test builds its own software-token provider, generates disposable keys, clicks the visible signature field, handles PIN and Save As, cancels and retries saving without signing again, verifies the PDF independently and checks the rendered certificate text. A separate no-card control starts the bundled reader stack without system OpenSC or PC/SC services. Source tests cover sizing, rotation and ambiguous/already-signed fields; those cases are not all separate GUI tests.
+The controller accepts same-repository PRs from the maintainer, Dependabot, Codex, the maintenance App, and narrowly scoped editor-pin proposals. It requires the full test matrix, a current base, and a completed Codex review tied to the current commit. A reaction alone is insufficient. Missing evidence, stale reviews, conflicts and cancelled jobs block merging. Tests run again after any correction.
 
-Failures run an approved-editor control and open or reopen the same tracking issue. The reporter closes it only after all three platform results and the source, package, desktop and simulation jobs pass. Missing, malformed or duplicate results keep it open. A failure is not retried into a pass. The private scheduler reconciles dispatch results, preserves ambiguous dispatches and retests successful combinations after seven days. Main-source or installer changes create a new test combination. Read the recorded runner image when comparing weekly results.
+A failed test or actionable review can request a small correction through the linked maintainer account. There are at most two correction requests per PR. Requests are recorded before posting; an uncertain response is not retried blindly. A request without progress expires after six hours. Codex can decline a task, hit a quota, or lack permission to push; those cases need maintainer attention. No API key or desktop login is copied into CI.
 
-The component watch opens or reopens its issue for newer versions, SDK changes, recent advisories or unavailable checks. It closes the issue when none of those conditions is reported. Component versions describe the checked-out source; they do not certify an older published artifact. A successful watch job means the queries completed, not that all dependencies are current or free of vulnerabilities.
+Approval rules, controller code, release scripts and workflow structure are outside automatic repair/merge scope. Dependabot changes to pinned action revisions are allowed only if the rest of the workflow is unchanged. Native dependency reports remain advisory. Repository text and test output are untrusted inputs to diagnosis, not authority to modify these boundaries.
 
-Reports and synthetic previews expire after 14 days; compatibility input packages expire after one day. Token databases, keys and test profiles are excluded from uploads. Workflow log retention follows GitHub repository settings.
+Dependabot version updates target research. Security-update PRs may initially target GitHub's default branch; the controller redirects those to research. All eligible PRs receive the same full checks. Editor-pin proposals receive an App commit to start the normal PR workflows even when originally created with GitHub's workflow token.
 
-Passing automation does not establish physical CAC or reader compatibility. The accepted hardware evidence remains the recorded Windows validations; Linux signing uses a software token. A failed baseline control indicates an environment, harness or existing-plugin problem that needs investigation before attributing the failure to a new editor.
+## Release approval
 
-## Build and release from GitHub
+After research passes its current full build, the controller proposes one frozen candidate. New research changes wait while that release PR is open. Closing an unmerged release PR rejects that snapshot; a new research commit is needed for another proposal.
 
-1. Merge a reviewed change with a new version in the plugin and worker configuration and release notes.
-2. Run **Build candidate** on `main`. Both builds work without desktop-produced bundles or warm caches. The Linux build verifies its glibc 2.28 ceiling. The `candidate` artifact includes the `.plugin`, checksum, install notes, source metadata and a CycloneDX component inventory.
-3. After all candidate checks pass, run **Prepare release draft** with its run ID. A published version cannot be reused. Existing draft bytes and tags must match; the workflow never overwrites them.
-4. Review the release checks and approve the `release` environment in GitHub. Publication carries the tested bytes forward. Any physical-card validation required by the change remains a maintainer decision.
+Version increments follow merged PR labels: `release:major`, `release:minor`, or `release:patch`, with the highest impact winning. An unlabelled batch defaults to minor. A manual controller run can override the proposed increment before staging. Change count does not establish compatibility. Review the proposed version before merging.
 
-After approving a new plugin release, update `tests/approved-plugin.json` with its immutable commit and asset hash so future compatibility runs test that release. This pin does not follow an arbitrary latest download automatically.
+1. Open the `release-verification` to `main` PR and download its candidate.
+2. Check the reports and any physical-card validation warranted by the changes.
+3. Approve the current commit and manually merge the PR. The controller never merges main.
+4. The publication workflow verifies that the merged tree equals the tested candidate, audits the original package, attests its provenance, and publishes those same bytes. It does not rebuild the plugin.
 
-## Optional diagnosis
+Main requires the owner's code review with stale approvals dismissed. The publisher also verifies the owner's approval on the exact candidate commit and the owner's merge identity. Existing release tags and differing asset bytes cannot be overwritten. Rerunning **Publish release** on the current main commit can resume an interrupted upload. Expired candidates require a fresh build and renewed review before publication.
 
-Store a dedicated OpenAI API key as the public repository's `OPENAI_API_KEY` secret, configure its API usage controls, then set `CODEX_ENABLED=true`. The desktop subscription and desktop authentication are not used. The workflow accepts only failed compatibility runs from trusted `main` history, makes one diagnosis attempt with a 15-minute job limit, and has no code-write or release permissions in the agent job. A time limit is not a monetary spending cap.
+After publication, a research PR carries the accepted version changes back. The next release uses the latest published version as its baseline. Published releases include `release-evidence.json`; compatibility discovery checks it against the tag, main history and GitHub asset digests. `tests/approved-plugin.json` is retained only as the bootstrap pin for the earlier release without this evidence file.
 
-Diagnosis is initially manual and read-only. Automatic agent-generated repair PRs are deferred until the diagnostic workflow has been exercised with configured API access. Editor-pin PRs are deterministic and do not use Codex. No workflow auto-merges PRs or publishes releases without the maintainer gate.
+## Hosted checks
 
-## Coverage limits
+Every research PR and research/verification snapshot builds both bundled workers from pinned sources. Required checks include:
 
-The component inventory records declared Python/native sources and font/SDK hashes; it is not a binary reachability analysis or an exhaustive native vulnerability scan. The watch reports supported upstream versions and published repository advisory feeds. Fonts, Python subcomponents, Microsoft/GCC runtimes and the bridge's embedded Go dependencies still need manual advisory review. See [third-party notices](../THIRD_PARTY_NOTICES.md).
+- Python and JavaScript regressions, source/package audit, workflow lint and PR dependency review.
+- Windows/Linux native runtime and actual ONLYOFFICE installation, Background plugins, removal and reinstallation.
+- Linux GUI signing with a software token, Save As cancellation/recovery and independent PDF validation.
+- Windows CNG signing with a disposable software certificate and the shipped bridge.
+- Linux background enablement, repeated workers, cold restart and virtual CAC removal/reinsertion through bundled OpenSC.
+- Bounded lifecycle orderings, PDF/appearance corpus, filesystem failures and negative evidence controls.
 
-The [implementation checklist](AUTOMATION_PLAN.md) records remaining setup and acceptance work.
+The Windows standard-user profile probe remains diagnostic: the hosted profile initialization failed before plugin execution in feasibility testing. Its failure is retained and is not counted as verified standard-user coverage. Physical CACs, readers, drivers, every Linux distribution and arbitrary PDFs remain outside exhaustive automation. See [TESTING.md](TESTING.md).
+
+## Editor and dependency monitoring
+
+Daily discovery checks stable ONLYOFFICE releases, validates official installer digests and dispatches compatibility tests against the latest approved published plugin. Successful combinations are retested weekly. Failed combinations retain their outcome until a new harness/package/editor combination or an explicit manual retry. An approved-editor control helps separate upstream changes from an existing environment problem.
+
+Each editor version has one issue. Missing, malformed, duplicate or failed results leave it open. A complete pass can propose the tested editor pin to research. Weekly native component reports identify upstream versions and available advisory feeds; they do not silently replace runtime pins or license notices.
+
+The separate scheduler health workflow detects stale discovery and incomplete dispatches. It cannot independently detect a total GitHub scheduling outage. The private repository uses its Actions allowance; the public repository runs the heavy tests. No self-hosted runner is required.
+
+Research packages expire after one day; verification packages after 90 days. Qualification reports expire after 30 days, compatibility reports after 14 days, and compatibility input packages after one day. Test keys, token databases and profiles are excluded from retained artifacts. GitHub's log retention settings apply separately.
+
+The optional API-based diagnosis workflow remains manual and read-only, disabled without separate API credentials. The maintenance controller uses the already configured Codex connector and linked-account token instead.

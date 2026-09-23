@@ -1,0 +1,60 @@
+name: Research and release controller
+on:
+  schedule:
+    - cron: '17,47 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Inspect eligibility without posting requests or changing branches
+        type: boolean
+        default: true
+      pull:
+        description: Optional research PR number to process without release promotion
+        type: string
+        default: ''
+      release_type:
+        description: Proposed version increment (auto uses PR labels, default minor)
+        type: choice
+        options: [auto, major, minor, patch]
+        default: auto
+permissions:
+  contents: read
+concurrency:
+  group: research-release-controller
+  cancel-in-progress: false
+jobs:
+  reconcile:
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.PIPELINE_ENABLED == 'true')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1
+        id: app
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: georgiannElskamp
+          repositories: CAC-PDF-SIGNER
+          permission-actions: write
+          permission-contents: write
+          permission-pull-requests: write
+          permission-statuses: write
+          permission-workflows: write
+      - name: Reconcile tested research and release candidates
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          CODEX_TRIGGER_TOKEN: ${{ secrets.CODEX_TRIGGER_TOKEN }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          PULL_NUMBER: ${{ inputs.pull }}
+          RELEASE_TYPE: ${{ inputs.release_type || 'auto' }}
+        run: |
+          args=(--release-type "$RELEASE_TYPE")
+          if [[ "$DRY_RUN" == true ]]; then args+=(--dry-run); fi
+          if [[ -n "$PULL_NUMBER" ]]; then args+=(--pull "$PULL_NUMBER"); fi
+          python3 -B pipeline.py "${args[@]}"

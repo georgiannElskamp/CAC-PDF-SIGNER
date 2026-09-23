@@ -37,6 +37,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           DISPATCH_TOKEN: ${{ steps.app.outputs.token }}
           FORCE: ${{ inputs.force }}
+          HARNESS_BRANCH: ${{ vars.HARNESS_BRANCH || 'main' }}
         run: |
           args=()
           if [[ "$FORCE" == true ]]; then args+=(--force); fi
