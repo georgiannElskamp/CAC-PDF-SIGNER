@@ -46,7 +46,8 @@ def inspect(commit):
     if len(matches) != 1:
         raise ValueError("No unique merged verification PR for this commit")
     pull = api(REPO + f"/pulls/{matches[0]['number']}")
-    approved_pull(pull, pages(REPO + f"/pulls/{pull['number']}/reviews"), commit)
+    reviews = pages(REPO + f"/pulls/{pull['number']}/reviews")
+    approved_pull(pull, reviews, commit)
     candidate = pull["head"]["sha"]
     if api(REPO + "/git/commits/" + candidate)["tree"]["sha"] != api(REPO + "/git/commits/" + commit)["tree"]["sha"]:
         raise ValueError("Merged source differs from the verified candidate")
@@ -54,6 +55,9 @@ def inspect(commit):
     run = max(runs, key=lambda r: (r["id"], r.get("run_attempt", 1))) if runs else None
     if not run or not candidate_run(run, candidate, "release-verification"):
         raise ValueError("The latest candidate run did not pass")
+    approved_at = max(r["submitted_at"] for r in reviews if r["user"]["login"] == OWNER and r["state"] == "APPROVED" and r["commit_id"] == candidate)
+    if approved_at < run["updated_at"]:
+        raise ValueError("Approve the candidate after its latest build completes; rebuilding invalidates earlier artifact review")
     jobs = pages(REPO + f"/actions/runs/{run['id']}/jobs?filter=latest", key="jobs")
     gates = [j for j in jobs if j["name"] == "Candidate qualification"]
     if len(gates) != 1 or gates[0]["conclusion"] != "success":

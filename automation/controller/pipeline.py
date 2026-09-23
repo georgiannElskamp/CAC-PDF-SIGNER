@@ -164,6 +164,9 @@ def process_pull(state, pull, dry_run=False):
         failed = result in {"ambiguous", "unavailable"} or expired(record["review"]["created_at"])
         status(sha, "failure" if failed else "pending", "Codex review: " + result)
         return
+    if any(label["name"] == "automation:no-merge" for label in pull.get("labels", [])):
+        status(sha, "pending", "Tests and review passed; automatic merge is held by label")
+        return
     latest = api(REPO + f"/pulls/{number}")
     if (not eligible(latest) or latest["head"]["sha"] != sha or latest["base"]["sha"] != pull["base"]["sha"]
             or ci_state(latest)[0] != "passed"):
@@ -284,6 +287,15 @@ def promote(state, release_type="auto", dry_run=False):
         print("Research is eligible for a frozen verification snapshot", flush=True)
         return
     latest = api(REPO + "/releases/latest")
+    try:
+        accepted = json.loads(text_file(".github/release-candidate.json", main))
+    except urllib.error.HTTPError as error:
+        if error.code != 404:
+            raise
+        accepted = None
+    if accepted and latest["tag_name"] != "v" + accepted["version"]:
+        print("Waiting for publication of the last accepted main release", flush=True)
+        return
     kind = "minor" if release_type == "auto" else release_type
     merged = pages(REPO + "/pulls?state=closed&base=research&sort=updated&direction=desc")
     relevant = [p for p in merged if p.get("merged_at") and p["merged_at"] > latest["published_at"]]
@@ -340,6 +352,9 @@ def main():
         process_pull(state, pull, args.dry_run)
     if not args.pull:
         promote(state, args.release_type, args.dry_run)
+    if not args.dry_run:
+        state.data["lastSuccessfulPoll"] = now()
+        state.save()
 
 
 if __name__ == "__main__":

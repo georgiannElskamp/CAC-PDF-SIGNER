@@ -18,6 +18,8 @@ The controller accepts same-repository PRs from the maintainer, Dependabot, Code
 
 A failed test or actionable review can request a small correction through the linked maintainer account. There are at most two correction requests per PR. Requests are recorded before posting; an uncertain response is not retried blindly. A request without progress expires after six hours. Codex can decline a task, hit a quota, or lack permission to push; those cases need maintainer attention. No API key or desktop login is copied into CI.
 
+The `automation:no-merge` label holds automatic merging while allowing tests, review and bounded corrections. Remove it only when the PR is ready for research integration.
+
 Approval rules, controller code, release scripts and workflow structure are outside automatic repair/merge scope. Dependabot changes to pinned action revisions are allowed only if the rest of the workflow is unchanged. Native dependency reports remain advisory. Repository text and test output are untrusted inputs to diagnosis, not authority to modify these boundaries.
 
 Dependabot version updates target research. Security-update PRs may initially target GitHub's default branch; the controller redirects those to research. All eligible PRs receive the same full checks. Editor-pin proposals receive an App commit to start the normal PR workflows even when originally created with GitHub's workflow token.
@@ -30,7 +32,7 @@ Version increments follow merged PR labels: `release:major`, `release:minor`, or
 
 1. Open the `release-verification` to `main` PR and download its candidate.
 2. Check the reports and any physical-card validation warranted by the changes.
-3. Approve the current commit and manually merge the PR. The controller never merges main.
+3. After the final candidate build finishes, approve the current commit and manually merge the PR. Rebuilding requires renewed approval. The controller never merges main.
 4. The publication workflow verifies that the merged tree equals the tested candidate, audits the original package, attests its provenance, and publishes those same bytes. It does not rebuild the plugin.
 
 Main requires the owner's code review with stale approvals dismissed. The publisher also verifies the owner's approval on the exact candidate commit and the owner's merge identity. Existing release tags and differing asset bytes cannot be overwritten. Rerunning **Publish release** on the current main commit can resume an interrupted upload. Expired candidates require a fresh build and renewed review before publication.
