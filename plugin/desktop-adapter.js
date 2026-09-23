@@ -14,7 +14,7 @@ window.CACDesktop = function (host) {
     String(api.asc_getPdfProps).replace(/\s/g, "") === "function(){returnnull}" &&
     typeof api.pluginMethod_GetAllForms === "function" &&
     typeof api.pluginMethod_IsFillingFormMode === "function" &&
-    version === "9.4.0" &&
+    (version === "9.4.0" || version === "9.4.0.129") &&
     host.Common && host.Common.Views && host.Common.Views.PdfSignDialog &&
     typeof host.Common.Views.PdfSignDialog.prototype.show === "function";
   if (!api || !native || (!pdfMode && !formMode)) {

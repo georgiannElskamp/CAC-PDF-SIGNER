@@ -149,6 +149,9 @@ class SignatureTests(unittest.TestCase):
             generic.pdf_name("/ONLYOFFICEFORM"): generic.ArrayObject([
                 generic.NumberObject(0), generic.NumberObject(0)
             ]),
+            generic.pdf_name("/PackagePayload"): generic.TextStringObject(
+                "SYNTHETIC_ONLYOFFICE_PACKAGE"
+            ),
         }))
         output = io.BytesIO()
         writer.write(output)
@@ -165,6 +168,8 @@ class SignatureTests(unittest.TestCase):
         self.assertEqual(signature.field_name, "Signature1_af_image")
         self.assertEqual([float(n) for n in signature.sig_field["/Rect"]], [70, 688, 224, 720])
         self.assertNotIn(b"/MetaOForm", signed)
+        self.assertNotIn(b"/ONLYOFFICEFORM", signed)
+        self.assertNotIn(b"SYNTHETIC_ONLYOFFICE_PACKAGE", signed)
         self.assertNotIn("/A", signature.sig_field)
         with self.assertRaisesRegex(ValueError, "not a saved ONLYOFFICE"):
             signing.sign_bytes(self.pdf, self.signer, {"kind": "onlyoffice-form", "field": "Signature1"})

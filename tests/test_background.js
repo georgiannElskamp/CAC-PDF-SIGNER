@@ -119,14 +119,14 @@ function adapterTest() {
   assert.throws(() => context.window.CACDesktop(host), /ONLYOFFICE unknown needs/);
 }
 adapterTest();
-function formAdapterTest() {
+function formAdapterTest(version) {
   const callbacks = {}, timers = [], clicks = [], errors = [], shown = [];
   const dialog = { show() { shown.push("native"); } };
   const originalShow = dialog.show;
   let modified = false, preview = true;
   const api = {
     asc_getPdfProps: vm.runInNewContext("(function(){return null})"),
-    GetVersion: () => "9.4.0",
+    GetVersion: () => version,
     isDocumentModified: () => modified,
     asc_getDocumentName: () => "form.pdf",
     pluginMethod_IsFillingFormMode: () => preview,
@@ -173,8 +173,11 @@ function formAdapterTest() {
   adapter.detach();
   assert.equal(dialog.show, originalShow);
   assert.equal(callbacks.asc_onShowContentControlsActions, undefined);
+  api.GetVersion = () => "9.4.0.128";
+  assert.throws(() => context.window.CACDesktop(host), /adapter update/);
 }
-formAdapterTest();
+formAdapterTest("9.4.0");
+formAdapterTest("9.4.0.129");
 async function startupTest(fail, unload, info = { editorType: "pdf" }) {
   const events = [], handlers = {};
   let resolve, reject;
