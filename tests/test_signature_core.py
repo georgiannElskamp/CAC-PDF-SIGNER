@@ -124,6 +124,18 @@ class SignatureTests(unittest.TestCase):
             generic.pdf_name("/S"): generic.pdf_name("/JavaScript"),
             generic.pdf_name("/JS"): generic.TextStringObject("event.target.buttonImportIcon();"),
         }))
+        unsigned_appearance = b"q 0.9 0.9 0.9 rg 0 0 154 32 re f Q"
+        appearance = writer.add_object(generic.StreamObject(
+            dict_data={
+                generic.pdf_name("/Type"): generic.pdf_name("/XObject"),
+                generic.pdf_name("/Subtype"): generic.pdf_name("/Form"),
+                generic.pdf_name("/BBox"): generic.ArrayObject([
+                    generic.NumberObject(n) for n in (0, 0, 154, 32)
+                ]),
+                generic.pdf_name("/Resources"): generic.DictionaryObject(),
+            },
+            stream_data=unsigned_appearance,
+        ))
         box = generic.DictionaryObject({
             generic.pdf_name("/Type"): generic.pdf_name("/Annot"),
             generic.pdf_name("/Subtype"): generic.pdf_name("/Widget"),
@@ -136,6 +148,9 @@ class SignatureTests(unittest.TestCase):
                 generic.NumberObject(n) for n in (70, 688, 224, 720)
             ]),
             generic.pdf_name("/A"): action,
+            generic.pdf_name("/AP"): generic.DictionaryObject({
+                generic.pdf_name("/N"): appearance,
+            }),
         })
         box_ref = writer.add_object(box)
         second_box = generic.DictionaryObject(box)
@@ -205,16 +220,38 @@ class SignatureTests(unittest.TestCase):
         )
         self.assertIsNone(signature_fields[1][1])
         self.assertNotIn("/A", signature_fields[1][2].get_object())
+        self.assertEqual(
+            signature_fields[1][2].get_object()["/AP"]["/N"].data,
+            unsigned_appearance,
+        )
+        self.assertNotEqual(signature.sig_field["/AP"]["/N"].data, unsigned_appearance)
         image_field = list(fields.enumerate_fields_in(
             reader.root["/AcroForm"]["/Fields"], with_name="Image1_af_image",
             refs_seen=set(), target_field_type="/Btn",
         ))
         self.assertEqual(len(image_field), 1)
         self.assertEqual(image_field[0][2].get_object()["/A"]["/S"], "/JavaScript")
+        self.assertEqual(
+            image_field[0][2].get_object()["/AP"]["/N"].data,
+            unsigned_appearance,
+        )
         twice_signed = signing.sign_bytes(signed, self.signer, {
             "field": "Signature2_af_image",
         })
         self.assertEqual(len(PdfFileReader(io.BytesIO(twice_signed)).embedded_signatures), 2)
+        missing_appearance = IncrementalPdfFileWriter(io.BytesIO(pdf))
+        second = next(ref.get_object() for field_name, _, ref in fields.enumerate_fields_in(
+            missing_appearance.root["/AcroForm"]["/Fields"],
+            with_name="Signature2_af_image", refs_seen=set(), target_field_type="/Btn",
+        ) if field_name == "Signature2_af_image")
+        second.pop("/AP")
+        missing_appearance.update_container(second)
+        broken_pdf = io.BytesIO()
+        missing_appearance.write(broken_pdf)
+        with self.assertRaisesRegex(ValueError, "no usable appearance"):
+            signing.sign_bytes(broken_pdf.getvalue(), self.signer, {
+                "kind": "onlyoffice-form", "field": "Signature1",
+            })
         with self.assertRaisesRegex(ValueError, "not a saved ONLYOFFICE"):
             signing.sign_bytes(self.pdf, self.signer, {"kind": "onlyoffice-form", "field": "Signature1"})
         with self.assertRaisesRegex(ValueError, "not an ONLYOFFICE signature box"):

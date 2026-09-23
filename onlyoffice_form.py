@@ -72,8 +72,20 @@ def _is_empty_signature_button(value, widget):
 
 def _convert_button(widget):
     widget[generic.pdf_name("/FT")] = generic.pdf_name("/Sig")
-    for key in ("/A", "/AA", "/AP", "/AS", "/DA", "/Ff", "/H", "/I", "/MK", "/V"):
+    for key in ("/A", "/AA", "/AS", "/DA", "/Ff", "/H", "/I", "/MK", "/V"):
         widget.pop(key, None)
+
+
+def _has_normal_appearance(widget):
+    appearance = widget.get("/AP")
+    if isinstance(appearance, generic.IndirectObject):
+        appearance = appearance.get_object()
+    if not isinstance(appearance, generic.DictionaryObject):
+        return False
+    normal = appearance.get("/N")
+    if isinstance(normal, generic.IndirectObject):
+        normal = normal.get_object()
+    return isinstance(normal, generic.StreamObject)
 
 
 def prepare_signature(pdf, form_key):
@@ -122,7 +134,9 @@ def prepare_signature(pdf, form_key):
     ]
     if sum(field_name == name for field_name, _ in targets) != 1:
         raise ValueError("The signature box did not survive PDF conversion.")
-    for _, target in targets:
+    for field_name, target in targets:
+        if field_name != name and not _has_normal_appearance(target):
+            raise ValueError("An unsigned ONLYOFFICE signature box has no usable appearance.")
         _convert_button(target)
         writer.update_container(target)
     return writer, name
