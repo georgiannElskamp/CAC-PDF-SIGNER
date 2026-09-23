@@ -20,7 +20,7 @@ If a cloud task cannot push its correction, it can return a structured patch. Th
 
 A failed test or actionable review can request a small correction through the linked maintainer account. There are at most two correction requests per PR. Requests are recorded before posting; an uncertain response is not retried blindly. A request without progress expires after six hours. Codex can decline a task, hit a quota, or lack permission to push; those cases need maintainer attention. No API key or desktop login is copied into CI.
 
-The `automation:no-merge` label holds automatic merging while allowing tests, review and bounded corrections. Remove it only when the PR is ready for research integration.
+The `automation:no-merge` label holds automatic merging while allowing tests, review and bounded corrections. Remove it only when the PR is ready for research integration. A rejected or ambiguous repair marks only that PR commit as needing attention; other PRs and release promotion continue. Push a reviewed correction to that PR, or inspect its saved state before explicitly resuming the blocked commit.
 
 Approval rules, controller code, release scripts and workflow structure require the owner's approval on the current research PR commit before automated processing. Codex is instructed not to change that policy during repairs; a changed commit needs renewed approval. The controller rechecks approval immediately before merging. Private controller deployment remains a separate manual maintenance step. Dependabot changes to pinned action revisions are allowed only if the rest of the workflow is unchanged. Native dependency reports remain advisory. Repository text and test output are untrusted inputs to diagnosis, not authority to modify these boundaries.
 

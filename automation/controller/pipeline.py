@@ -275,6 +275,27 @@ def successful_build(sha, branch):
     return run
 
 
+def reconcile_pull(state, pull, dry_run=False):
+    if not eligible(pull):
+        return
+    number, sha = str(pull["number"]), pull["head"]["sha"]
+    record = state.data["pulls"].get(number, {}).get("heads", {}).get(sha, {})
+    if record.get("attention"):
+        print(f"PR #{number}: maintainer attention required: {record['attention']}", flush=True)
+        if not dry_run:
+            status(sha, "failure", "Repair/evidence rejected; maintainer attention required")
+        return
+    try:
+        process_pull(state, pull, dry_run)
+    except (ValueError, RuntimeError) as error:
+        print(f"PR #{number}: {type(error).__name__}: {error}", flush=True)
+        if not dry_run:
+            record = state.data["pulls"].setdefault(number, {"heads": {}})["heads"].setdefault(sha, {})
+            record["attention"] = str(error)[:500]
+            state.save()
+            status(sha, "failure", "Repair/evidence rejected; maintainer attention required")
+
+
 def create_commit(branch, base, files, message, other_parent=None):
     tree = api(REPO + "/git/commits/" + base)["tree"]["sha"]
     tree = api(REPO + "/git/trees", "POST", {"base_tree": tree, "tree": [
@@ -426,7 +447,7 @@ def main():
     for pull in pulls[:5]:
         if not args.pull:
             pull = api(REPO + f"/pulls/{pull['number']}")
-        process_pull(state, pull, args.dry_run)
+        reconcile_pull(state, pull, args.dry_run)
     if not args.pull:
         promote(state, args.release_type, args.dry_run)
     if not args.dry_run:

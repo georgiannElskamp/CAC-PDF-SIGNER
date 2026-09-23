@@ -1,6 +1,7 @@
 import copy
 import hashlib
 import json
+import re
 from pathlib import Path
 import sys
 import tempfile
@@ -120,6 +121,25 @@ class PipelinePolicyTests(unittest.TestCase):
         with patch.object(pipeline, 'api') as api:
             pipeline.process_pull(Mock(), value)
             api.assert_not_called()
+
+    def test_invalid_repair_isolated_to_its_pr_and_not_reparsed(self):
+        state = Mock(data={'pulls':{}})
+        other = pull(); other['number']=124
+        with patch.object(pipeline,'process_pull',side_effect=[ValueError('Invalid repair hash'),None]) as process,patch.object(pipeline,'status') as status:
+            pipeline.reconcile_pull(state,pull())
+            pipeline.reconcile_pull(state,other)
+            pipeline.reconcile_pull(state,pull())
+            self.assertEqual(process.call_count,2)
+            self.assertEqual(status.call_args.args[1],'failure')
+        self.assertEqual(state.data['pulls']['123']['heads'][SHA]['attention'],'Invalid repair hash')
+
+    def test_retarget_events_remain_enabled_for_all_required_pr_workflows(self):
+        root=Path(__file__).resolve().parents[1]
+        for name in ('checks.yml','dependency-review.yml','pr-build.yml'):
+            workflow=(root/'.github/workflows'/name).read_text(encoding='utf-8')
+            declared=re.search(r'(?m)^    types: \[([^\]]+)\]',workflow)
+            self.assertIsNotNone(declared)
+            self.assertIn('edited',{event.strip() for event in declared.group(1).split(',')})
 
     def test_changed_head_after_review_cannot_merge(self):
         state = Mock(data={'pulls': {}})
