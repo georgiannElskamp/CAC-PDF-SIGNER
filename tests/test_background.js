@@ -186,6 +186,20 @@ async function formAdapterTest(version) {
     assert.equal(next.name, name);
     assert.equal(reads.at(-1), `C:\\Test User é%\\recover\\DE_123\\${name}`);
   }
+  for (const name of ["Form: 2026.pdf", "Form\\copy.pdf"]) {
+    documentName = name;
+    sourcePath = `/tmp/Test User é%/${name}`;
+    host.AscCommon.Ss.tia = "file:///tmp/Test%20User%20%C3%A9%25/recover/DE_123";
+    const next = await adapter.snapshot("Signature1");
+    assert.equal(next.name, name);
+    assert.equal(reads.at(-1), `/tmp/Test User é%/recover/DE_123/${name}`);
+  }
+  host.AscCommon.Ss.tia = "file:///C:/Test%20User%20%C3%A9%25/recover/DE_123";
+  sourcePath = snapshot.sourcePath;
+  for (const name of ["Form: 2026.pdf", "Form\\copy.pdf"]) {
+    documentName = name;
+    await assert.rejects(adapter.snapshot("Signature1"), /recovery metadata is invalid/);
+  }
   documentName = "form.pdf";
   sourcePath = snapshot.sourcePath;
   const action = { type: 12, pr: {

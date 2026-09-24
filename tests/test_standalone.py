@@ -140,10 +140,9 @@ class StandaloneRecoveryTests(unittest.TestCase):
         self.assertEqual(result["field"], "Signature1_af_image")
         self.assertNotIn(b"/MetaOForm", prepared)
         self.assertEqual(self.original.read_bytes(), b"%PDF-replaced after editor load")
-        self.assertEqual(
-            self.session.prepared_source(str(prepared_path), prepared, result["field"])["source"],
-            str(self.original),
-        )
+        handoff = self.session.prepared_source(str(prepared_path), prepared, result["field"])
+        self.assertEqual(handoff["source"], str(self.original))
+        self.assertEqual(handoff["name"], self.original.name)
         signer = object()
         signing_request = {
             "op": "sign", "field": result["field"], "sourcePath": str(prepared_path),
@@ -159,6 +158,8 @@ class StandaloneRecoveryTests(unittest.TestCase):
         })
         self.assertEqual(metadata["source"], str(self.original))
         self.assertEqual(metadata["preparedPath"], str(prepared_path))
+        self.assertEqual(metadata["name"], self.original.name)
+        self.assertTrue(metadata["recoveryName"].startswith("original document-CAC-signed-"))
         for path in (self.original, prepared_path):
             with self.assertRaisesRegex(ValueError, "preserve the original"):
                 self.session.save("ignored", metadata, path)

@@ -5,6 +5,7 @@ import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import signal
 import subprocess
@@ -64,6 +65,13 @@ def stop_windows_editor(directory):
     finally:
         for handle in handles:
             _winapi.CloseHandle(handle)
+
+
+def supports_form_handoff(version):
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:[-+][0-9A-Za-z.-]+)?", version)
+    if not match:
+        raise ValueError(f"Invalid plugin version: {version}")
+    return tuple(map(int, match.groups())) >= (0, 9, 0)
 
 
 def check(package, manifest=None, plugin_version=None, form_handoff=False):
@@ -137,7 +145,7 @@ def check(package, manifest=None, plugin_version=None, form_handoff=False):
                         child.wait(timeout=10)
 
         run_session(pdf, 9251, "tests/editor_smoke.js", [str(package.resolve()), version, pdf.name], "standard")
-        if form_handoff or tuple(map(int, version.split("."))) >= (0, 9, 0):
+        if form_handoff or supports_form_handoff(version):
             from check_form_handoff import verify as verify_form_handoff
 
             form = work / "Example User é" / "form source.pdf"

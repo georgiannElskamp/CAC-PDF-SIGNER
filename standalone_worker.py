@@ -147,7 +147,8 @@ class SigningSession:
         target = self.prepared / ("CAC-review-" + identifier + ".pdf")
         record = target.with_suffix(".json")
         digest = hashlib.sha256(prepared).hexdigest()
-        metadata = {"sha256": digest, "field": field, "source": source}
+        metadata = {"sha256": digest, "field": field, "source": source,
+                    "name": Path(source).name}
         try:
             descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(descriptor, "wb") as stream:
@@ -183,7 +184,8 @@ class SigningSession:
                 or record.get("field") != field
                 or not isinstance(record.get("source"), str)
                 or not Path(record["source"]).is_absolute()
-                or Path(record["source"]).suffix.lower() != ".pdf"):
+                or Path(record["source"]).suffix.lower() != ".pdf"
+                or record.get("name") != Path(record["source"]).name):
             raise ValueError("The prepared PDF changed. Reopen the form.")
         return record
 
@@ -264,9 +266,8 @@ class SigningSession:
             return (*pending, True)
         with card_signer(self.bridge) as signer:
             signed = sign_bytes(pdf, signer, {"field": field, "kind": kind})
-        name = re.sub(
-            r"[^a-zA-Z0-9_. -]", "_", str(request.get("name", "document.pdf"))
-        )[:120]
+        original_name = handoff["name"] if handoff else request.get("name", "document.pdf")
+        name = re.sub(r"[^a-zA-Z0-9_. -]", "_", str(original_name))[:120]
         stem = Path(name).stem.strip(". ") or "document"
         identifier = uuid.uuid4().hex[:12]
         self.output.mkdir(parents=True, exist_ok=True)

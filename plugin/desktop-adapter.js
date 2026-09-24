@@ -101,7 +101,7 @@ window.CACDesktop = function (host) {
         }
       });
     }
-    function fileName(bytes) {
+    function fileName(bytes, sourcePath) {
       if (bytes.length > 4096) throw new Error("The editor's recovery metadata is too large.");
       const xml = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
       if (/<!/i.test(xml)) throw new Error("The editor's recovery metadata is invalid.");
@@ -111,13 +111,15 @@ window.CACDesktop = function (host) {
       if (info?.tagName !== "info" || info.getAttribute("type") !== "87" ||
           doc.getElementsByTagName("parsererror").length ||
           typeof name !== "string" || !/\.pdf$/i.test(name) ||
-          name === "." || name === ".." || /[\\/:\0\r\n]/.test(name))
+          name === "." || name === ".." || /[\/\0\r\n]/.test(name) ||
+          (/^(?:[A-Za-z]:[\\/]|\\\\)/.test(sourcePath) && /[\\:]/.test(name)))
         throw new Error("The editor's recovery metadata is invalid.");
       return name;
     }
     async function snapshot(field) {
       const identity = state(field);
-      const name = fileName(await load(recoveryFile(identity.directory, "asc_name.info")));
+      const name = fileName(await load(recoveryFile(identity.directory, "asc_name.info")),
+        identity.sourcePath);
       if (!same(identity, state(field)) || name !== identity.name)
         throw new Error("The active PDF form changed. Reopen it before signing.");
       const bytes = await load(recoveryFile(identity.directory, name));
