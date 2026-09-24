@@ -33,6 +33,9 @@ FORBIDDEN_SUFFIXES = {
 }
 FORBIDDEN_NAMES = {"settings.json", "connection.js", ".env", "helper.pid"}
 FORBIDDEN_DIRS = {"Signed", "runtime", ".venv", "venv", "__pycache__"}
+REVIEWED_PDFS = {
+    "tests/fixtures/onlyoffice-form.pdf": "8507e0c85d88f1f4637d09e17cc9a47f3394a2d12c3aebcf7ba82dc00ca97d52",
+}
 TEXT_SUFFIXES = {".py", ".js", ".html", ".json", ".md", ".txt", ".yml", ".yaml", ".cmd", ".sh", ".ps1", ".patch"}
 TEXT_NAMES = {".gitignore", ".gitattributes", "LICENSE", "NOTICE", "Dockerfile", "CODEOWNERS"}
 PATTERNS = {
@@ -114,7 +117,7 @@ def audit_release(root):
                 raise ValueError("Bundled source inventory differs from the repository.")
             for name, path in files.items():
                 packaged, local = archive.read("source/" + name), path.read_bytes()
-                if path.suffix.lower() not in (".png", ".ttf", ".otf"):
+                if path.suffix.lower() not in (".png", ".ttf", ".otf", ".pdf"):
                     # Git normalizes text line endings on checkout.
                     packaged = packaged.replace(b"\r\n", b"\n")
                     local = local.replace(b"\r\n", b"\n")
@@ -192,8 +195,11 @@ def audit(root, include_release=True):
         if not path.is_file():
             continue
         count += 1
+        data = path.read_bytes()
+        reviewed_pdf = (path.suffix.lower() == ".pdf" and
+                        REVIEWED_PDFS.get(rel.as_posix()) == hashlib.sha256(data).hexdigest())
         if (
-            path.suffix.lower() in FORBIDDEN_SUFFIXES
+            (path.suffix.lower() in FORBIDDEN_SUFFIXES and not reviewed_pdf)
             or path.name in FORBIDDEN_NAMES
             or any(
                 part in FORBIDDEN_DIRS
@@ -202,8 +208,9 @@ def audit(root, include_release=True):
             )
         ):
             problems.append((str(rel), "private or generated file"))
-        data = path.read_bytes()
-        if path.suffix.lower() == ".png":
+        if reviewed_pdf:
+            pass
+        elif path.suffix.lower() == ".png":
             if rel.as_posix() not in (
                 "plugin/icon.png",
                 "plugin/icon@2x.png",

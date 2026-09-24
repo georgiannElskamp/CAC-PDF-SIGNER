@@ -39,7 +39,7 @@ Version increments follow merged PR labels: `release:major`, `release:minor`, or
 
 Main requires the owner's code review with stale approvals dismissed. The publisher also verifies the owner's approval on the exact candidate commit and the owner's merge identity. Existing release tags and differing asset bytes cannot be overwritten. Rerunning **Publish release** on the current main commit can resume an interrupted upload. Expired candidates require a fresh build and renewed review before publication.
 
-After publication, a research PR carries the accepted version changes back. The next release uses the latest published version as its baseline. Published releases include `release-evidence.json`; compatibility discovery checks it against the tag, main history and GitHub asset digests. `tests/approved-plugin.json` is retained only as the bootstrap pin for the earlier release without this evidence file.
+After publication, a research PR carries the accepted version changes back. The next release uses the latest published version as its baseline. Release notes select merged research PRs by commit ancestry since the last accepted research snapshot, so later synchronization PRs are included. Published releases include `release-evidence.json`; compatibility discovery checks it against the tag, main history and GitHub asset digests. `tests/approved-plugin.json` is retained only as the bootstrap pin for the earlier release without this evidence file.
 
 ## Hosted checks
 
@@ -47,6 +47,7 @@ Every research PR and research/verification snapshot builds both bundled workers
 
 - Python and JavaScript regressions, source/package audit, workflow lint and PR dependency review.
 - Windows/Linux native runtime and actual ONLYOFFICE installation, Background plugins, removal and reinstallation.
+- A real ONLYOFFICE form-box click, card-free preparation, and a standard signature field in the review PDF, with source-page comparison against the editor's loaded snapshot.
 - Linux GUI signing with a software token, Save As cancellation/recovery and independent PDF validation.
 - Windows CNG signing with a disposable software certificate and the shipped bridge.
 - Linux background enablement, repeated workers, cold restart and virtual CAC removal/reinsertion through bundled OpenSC.

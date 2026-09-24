@@ -10,29 +10,18 @@ import re
 import sys
 import tempfile
 import threading
+import time
 import uuid
 from contextlib import contextmanager
 from pathlib import Path, PureWindowsPath
 
 from runtime_config import MAX_PDF, VERSION, state_directory
 MAX_REQUEST = MAX_PDF * 4 // 3 + 16384
+PREPARED_AGE = 30 * 24 * 60 * 60
 
 
-def read_form_source(source):
-    if not isinstance(source, str) or not source:
-        raise ValueError("Save and reopen the ONLYOFFICE PDF form before signing.")
-    path = Path(source)
-    if not path.is_absolute() or path.suffix.lower() != ".pdf":
-        raise ValueError("A saved local PDF form is required.")
-    before = path.stat()
-    if before.st_size > MAX_PDF:
-        raise ValueError("Choose a PDF smaller than 40 MB.")
-    pdf = path.read_bytes()
-    after = path.stat()
-    if (before.st_dev, before.st_ino, before.st_mtime_ns, before.st_size) != (
-        after.st_dev, after.st_ino, after.st_mtime_ns, after.st_size
-    ):
-        raise ValueError("The PDF changed while it was being read. Reopen it and retry.")
+def request_pdf(request):
+    pdf = base64.b64decode(request["pdf"], validate=True)
     if len(pdf) > MAX_PDF or not pdf.startswith(b"%PDF-"):
         raise ValueError("Choose a PDF smaller than 40 MB.")
     return pdf
@@ -109,7 +98,96 @@ class SigningSession:
     def __init__(self, directory, bridge):
         self.directory = Path(directory)
         self.output = self.directory / "Signed"
+        self.prepared = self.directory / "Prepared"
         self.bridge = Path(bridge)
+
+    def prune_prepared(self):
+        if not self.prepared.is_dir():
+            return
+        cutoff = time.time() - PREPARED_AGE
+        for record in self.prepared.glob("CAC-review-*.json"):
+            if not re.fullmatch(r"CAC-review-[0-9a-f]{32}\.json", record.name):
+                continue
+            try:
+                if record.stat().st_mtime >= cutoff:
+                    continue
+                pdf = record.with_suffix(".pdf")
+                if pdf.is_file() and pdf.stat().st_mtime >= cutoff:
+                    continue
+                pdf.unlink(missing_ok=True)
+                record.unlink()
+            except OSError:
+                pass
+        for pdf in self.prepared.glob("CAC-review-*.pdf"):
+            if not re.fullmatch(r"CAC-review-[0-9a-f]{32}\.pdf", pdf.name):
+                continue
+            try:
+                if not pdf.with_suffix(".json").exists() and pdf.stat().st_mtime < cutoff:
+                    pdf.unlink()
+            except OSError:
+                pass
+
+    def prepare_form(self, request):
+        from onlyoffice_form import prepare_signature
+
+        pdf = request_pdf(request)
+        source = request.get("sourcePath")
+        if not isinstance(source, str) or not Path(source).is_absolute() or Path(source).suffix.lower() != ".pdf":
+            raise ValueError("Save and reopen the local PDF form before signing.")
+        writer, field = prepare_signature(pdf, request.get("field"))
+        import io
+        output = io.BytesIO()
+        writer.write(output)
+        prepared = output.getvalue()
+        if len(prepared) > MAX_PDF or not prepared.startswith(b"%PDF-"):
+            raise ValueError("The prepared PDF exceeds the 40 MB limit.")
+        self.prepared.mkdir(parents=True, exist_ok=True, mode=0o700)
+        self.prune_prepared()
+        identifier = uuid.uuid4().hex
+        target = self.prepared / ("CAC-review-" + identifier + ".pdf")
+        record = target.with_suffix(".json")
+        digest = hashlib.sha256(prepared).hexdigest()
+        metadata = {"sha256": digest, "field": field, "source": source,
+                    "name": Path(source).name}
+        try:
+            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(prepared)
+                stream.flush()
+                os.fsync(stream.fileno())
+            descriptor = os.open(record, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(descriptor, "w", encoding="utf-8") as stream:
+                json.dump(metadata, stream)
+                stream.flush()
+                os.fsync(stream.fileno())
+        except BaseException:
+            target.unlink(missing_ok=True)
+            record.unlink(missing_ok=True)
+            raise
+        return {"ok": True, "prepared": True, "path": str(target), "sha256": digest,
+                "field": field}
+
+    def prepared_source(self, source, pdf, field):
+        if not source:
+            return None
+        path = Path(source).resolve()
+        if path.parent != self.prepared.resolve():
+            return None
+        if not re.fullmatch(r"CAC-review-[0-9a-f]{32}\.pdf", path.name):
+            raise ValueError("The prepared PDF handoff is invalid. Reopen the form.")
+        try:
+            record = json.loads(path.with_suffix(".json").read_text(encoding="utf-8"))
+        except (OSError, ValueError) as exc:
+            raise ValueError("The prepared PDF handoff is missing. Reopen the form.") from exc
+        if (not isinstance(record, dict)
+                or record.get("sha256") != hashlib.sha256(pdf).hexdigest()
+                or record.get("field") != field
+                or not isinstance(record.get("source"), str)
+                or not Path(record["source"]).is_absolute()
+                or Path(record["source"]).suffix.lower() != ".pdf"
+                or record.get("name") != Path(record["source"]).name):
+            raise ValueError("The prepared PDF changed. Reopen the form.")
+        return record
 
     def prepare_output(self):
         try:
@@ -133,7 +211,7 @@ class SigningSession:
             os.fsync(stream.fileno())
         os.replace(temporary, path)
 
-    def pending(self, source_hash, field):
+    def pending(self, source_hash, field, source=None):
         for path in sorted(
             self.output.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True
         ):
@@ -146,6 +224,7 @@ class SigningSession:
                 and re.fullmatch(r"[0-9a-f]{12}", path.stem)
                 and metadata.get("sourceHash") == source_hash
                 and metadata.get("field") == field
+                and (source is None or metadata.get("source") == source)
                 and not metadata.get("savedPath")
             ):
                 # Reject damaged recovery instead of signing again.
@@ -167,32 +246,28 @@ class SigningSession:
         from signing import sign_bytes
 
         kind = request.get("kind", "pdf-signature")
-        if kind == "onlyoffice-form":
-            pdf = read_form_source(request.get("sourcePath"))
-            expected = request.get("expectedSourceHash")
-            if not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{64}", expected):
-                raise ValueError("Reopen the PDF form before signing.")
-            if hashlib.sha256(pdf).hexdigest() != expected:
-                raise ValueError("The PDF changed after opening. Reopen it before signing.")
-        elif kind == "pdf-signature":
-            pdf = base64.b64decode(request["pdf"], validate=True)
-        else:
+        if kind != "pdf-signature":
             raise ValueError("Unsupported signing request.")
-        if len(pdf) > MAX_PDF or not pdf.startswith(b"%PDF-"):
-            raise ValueError("Choose a PDF smaller than 40 MB.")
+        pdf = request_pdf(request)
         field = request.get("field")
         if not isinstance(field, str) or not field.strip():
             raise ValueError("Click an empty PDF signature field.")
+        source = request.get("sourcePath", "")
+        if not isinstance(source, str):
+            source = ""
+        handoff = self.prepared_source(source, pdf, field)
+        prepared_path = source if handoff else ""
+        if handoff:
+            source = handoff["source"]
         self.prepare_output()
         source_hash = hashlib.sha256(pdf).hexdigest()
-        pending = self.pending(source_hash, field)
+        pending = self.pending(source_hash, field, source)
         if pending:
             return (*pending, True)
         with card_signer(self.bridge) as signer:
             signed = sign_bytes(pdf, signer, {"field": field, "kind": kind})
-        name = re.sub(
-            r"[^a-zA-Z0-9_. -]", "_", str(request.get("name", "document.pdf"))
-        )[:120]
+        original_name = handoff["name"] if handoff else request.get("name", "document.pdf")
+        name = re.sub(r"[^a-zA-Z0-9_. -]", "_", str(original_name))[:120]
         stem = Path(name).stem.strip(". ") or "document"
         identifier = uuid.uuid4().hex[:12]
         self.output.mkdir(parents=True, exist_ok=True)
@@ -201,12 +276,10 @@ class SigningSession:
             stream.write(signed)
             stream.flush()
             os.fsync(stream.fileno())
-        source = request.get("sourcePath", "")
-        if not isinstance(source, str):
-            source = ""
         metadata = dict(
             sha256=hashlib.sha256(signed).hexdigest(),
             source=source,
+            preparedPath=prepared_path,
             name=name,
             sourceHash=source_hash,
             field=field,
@@ -225,10 +298,12 @@ class SigningSession:
         ):
             raise ValueError("Choose a PDF file in the Save As dialog.")
         target = target.resolve()
-        source = metadata["source"]
-        same_source = source and comparable_path(target) == comparable_path(source)
-        if source and target.exists() and Path(source).exists():
-            same_source = same_source or os.path.samefile(target, source)
+        sources = [p for p in (metadata["source"], metadata.get("preparedPath")) if p]
+        same_source = any(comparable_path(target) == comparable_path(source) for source in sources)
+        if target.exists():
+            same_source = same_source or any(
+                Path(source).exists() and os.path.samefile(target, source) for source in sources
+            )
         if same_source:
             raise ValueError(
                 "Choose a different filename to preserve the original PDF."
@@ -335,10 +410,8 @@ def main():
                 SigningSession(state_directory(), bridge).prepare_output()
                 result.update(dependencyCheckOnly=False, desktopReady=True,
                               recoveryWritable=True, cardChecked=False)
-                if "sourcePath" in request:
-                    result["sourceHash"] = hashlib.sha256(
-                        read_form_source(request["sourcePath"])
-                    ).hexdigest()
+        elif request.get("op") == "prepare":
+            result = SigningSession(state_directory(), bridge).prepare_form(request)
         elif request.get("op") == "sign":
             result = SigningSession(state_directory(), bridge).run(request)
         else:

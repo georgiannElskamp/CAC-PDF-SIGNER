@@ -35,20 +35,6 @@ Copy `linux-bundle` to the Windows build machine for the combined build. Require
 
 ## Test and publish
 
-Follow [TESTING.md](TESTING.md). Put the final plugin, checksum and matching `INSTALL.txt` in `release/`. That directory stays out of Git; assets are distributed through GitHub Releases.
+Follow [TESTING.md](TESTING.md) before submitting a research PR. `release/` is local build output and stays out of Git. The normal publication path is the three-branch GitHub workflow: qualified changes enter `research`, a frozen `release-verification` candidate waits for the owner's review, and an approved merge into `main` publishes the same tested package bytes. See [GitHub maintenance](AUTOMATION.md).
 
-```sh
-python -B tools/publish_release.py
-```
-
-This command checks the local release without changing GitHub. After review and validation, commit the source and run:
-
-```sh
-python -B tools/publish_release.py --publish
-```
-
-Publishing pushes the commit and version tag, uploads a draft and starts the release workflow. Publication requires Windows/Linux source tests, checks of both uploaded workers, installation tests in fresh editors, simulated Linux signing, an exact match between tagged source and packaged source, and approval in the `release` environment. Editor installers and checksums are pinned in `tests/editor-installers.json`; they are test dependencies and are not shipped in the plugin.
-
-Versions containing a hyphen are initially published as prereleases. A failed check leaves the release in draft. Retry an unchanged draft through **Actions > Publish release > Run workflow** with its tag. If source or package content changes after tagging, use a new version and tag. Do not replace published assets or move release tags.
-
-After validation, an existing candidate can be marked as the current release in GitHub while retaining its tag and assets. Record the completed validation and accepted limits in its release notes. Documentation updates on the default branch do not change the tagged source or the documentation embedded in that artifact.
+The release publisher verifies the source tree, native manifests, checksum, owner approval and artifact identity before creating or resuming a GitHub release. It does not rebuild after approval. Existing release assets and tags are immutable; changed source requires a new candidate and version. Editor installer pins in `tests/editor-installers.json` are test dependencies, not part of the plugin.

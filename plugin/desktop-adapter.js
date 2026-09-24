@@ -15,6 +15,8 @@ window.CACDesktop = function (host) {
     typeof api.pluginMethod_GetAllForms === "function" &&
     typeof api.pluginMethod_IsFillingFormMode === "function" &&
     (version === "9.4.0" || version === "9.4.0.129") &&
+    typeof host.AscCommon?.Ss?.tia === "string" &&
+    typeof native?.loadLocalFile === "function" &&
     host.Common && host.Common.Views && host.Common.Views.PdfSignDialog &&
     typeof host.Common.Views.PdfSignDialog.prototype.show === "function";
   if (!api || !native || (!pdfMode && !formMode)) {
@@ -40,20 +42,95 @@ window.CACDesktop = function (host) {
         throw new Error("Save and reopen the local PDF form before signing.");
       return path;
     }
-    function snapshot(field) {
+    function state(field) {
       if (api.isDocumentModified() || editedSinceLoad)
         throw new Error("Save your PDF form edits and reopen it before signing.");
+      if (!api.pluginMethod_IsFillingFormMode())
+        throw new Error("Switch the PDF form to Preview mode before signing.");
       const forms = api.pluginMethod_GetAllForms();
       const matches = Array.isArray(forms) ? forms.filter(
         (f) => f.FormKey === field && !f.FormValue,
       ) : [];
-      if (matches.length !== 1)
+      if (matches.length !== 1 || matches[0].InternalId == null)
         throw new Error("This ONLYOFFICE signature box is filled or ambiguous.");
       return {
-        kind: "onlyoffice-form",
-        name: api.asc_getDocumentName(),
         sourcePath: sourcePath(),
+        directory: host.AscCommon.Ss.tia,
+        name: api.asc_getDocumentName(),
+        id: String(matches[0].InternalId),
       };
+    }
+    function same(a, b) {
+      return a.sourcePath === b.sourcePath && a.directory === b.directory &&
+        a.name === b.name && a.id === b.id;
+    }
+    function filePath(url) {
+      if (url.protocol !== "file:" || url.search || url.hash || url.username || url.password)
+        throw new Error("The editor's recovery location is unsupported.");
+      const path = decodeURIComponent(url.pathname.replace(/%(?![0-9a-fA-F]{2})/g, "%25"));
+      if (/[\0\r\n]/.test(path))
+        throw new Error("The editor's recovery location is invalid.");
+      if (/^\/[A-Za-z]:\//.test(path))
+        return path.slice(1).replace(/\//g, "\\");
+      if (url.hostname && /^Win/i.test(host.navigator?.platform || ""))
+        return "\\\\" + url.hostname + path.replace(/\//g, "\\");
+      if (url.hostname)
+        throw new Error("The editor's recovery location is unsupported.");
+      if (!path.startsWith("/"))
+        throw new Error("The editor's recovery location is invalid.");
+      return path;
+    }
+    function recoveryFile(directory, name) {
+      const base = new URL(directory.endsWith("/") ? directory : directory + "/");
+      return filePath(new URL(encodeURIComponent(name), base));
+    }
+    function load(path) {
+      return new Promise((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error("The editor's recovery copy could not be read.")), 10000);
+        try {
+          native.loadLocalFile(path, (value) => {
+            clearTimeout(timeout);
+            if (!value || (typeof value.length !== "number" &&
+                !(value instanceof ArrayBuffer)))
+              reject(new Error("The editor's recovery copy is missing."));
+            else resolve(new Uint8Array(value));
+          });
+        } catch (error) {
+          clearTimeout(timeout);
+          reject(error);
+        }
+      });
+    }
+    function fileName(bytes, sourcePath) {
+      if (bytes.length > 4096) throw new Error("The editor's recovery metadata is too large.");
+      const xml = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+      if (/<!/i.test(xml)) throw new Error("The editor's recovery metadata is invalid.");
+      const doc = new DOMParser().parseFromString(xml, "application/xml");
+      const info = doc.documentElement;
+      const name = info?.getAttribute("name");
+      if (info?.tagName !== "info" || info.getAttribute("type") !== "87" ||
+          doc.getElementsByTagName("parsererror").length ||
+          typeof name !== "string" || !/\.pdf$/i.test(name) ||
+          name === "." || name === ".." || /[\/\0\r\n]/.test(name) ||
+          (/^(?:[A-Za-z]:[\\/]|\\\\)/.test(sourcePath) && /[\\:]/.test(name)))
+        throw new Error("The editor's recovery metadata is invalid.");
+      return name;
+    }
+    async function snapshot(field) {
+      const identity = state(field);
+      const name = fileName(await load(recoveryFile(identity.directory, "asc_name.info")),
+        identity.sourcePath);
+      if (!same(identity, state(field)) || name !== identity.name)
+        throw new Error("The active PDF form changed. Reopen it before signing.");
+      const bytes = await load(recoveryFile(identity.directory, name));
+      if (!same(identity, state(field)) || bytes.length > 40 * 1024 * 1024 ||
+          String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-")
+        throw new Error("The active PDF form changed or its recovery copy is invalid.");
+      return { kind: "onlyoffice-form", bytes, name, sourcePath: identity.sourcePath, identity };
+    }
+    function stillCurrent(source, field) {
+      try { return same(source.identity, state(field)); }
+      catch (_) { return false; }
     }
     function attach(onClick, onError) {
       originalShow = dialog.show;
@@ -107,7 +184,7 @@ window.CACDesktop = function (host) {
       for (const token of pending) token.claimed = true;
       pending.length = 0;
     }
-    return { snapshot, attach, detach, sourcePath };
+    return { snapshot, attach, detach, stillCurrent };
   }
   function renderer() {
     const r = api.jf;
