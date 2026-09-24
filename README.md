@@ -1,10 +1,10 @@
 # CAC PDF Signer for ONLYOFFICE
 
-Sign existing PDF signature fields with a Common Access Card in ONLYOFFICE Desktop Editors. The background plugin fills the signature block with certificate details, scales the text to fit, and opens Save As.
+Sign PDF signature fields and ONLYOFFICE form signature boxes with a Common Access Card in ONLYOFFICE Desktop Editors. The background plugin fills the signature block with certificate details, scales the text to fit, and opens Save As.
 
 **[Download the approved release](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/releases/latest)** · [Installation](docs/INSTALLATION.md) · [Validation status](docs/TESTING.md)
 
-The physical-card validation baseline is `0.7.0-rc.6`, tested on two additional Windows installations. Fresh Debian 12 validation used a simulated card. Subsequent releases link their automated evidence and require maintainer approval. Physical CAC signing on Linux remains unverified.
+The maintainer has reported physical CAC signing on Windows installations. Linux signing has been tested with a simulated card; physical CAC signing on Linux remains unverified. Each release links its automated evidence and requires maintainer approval.
 
 ## Compatibility
 
@@ -21,7 +21,7 @@ ARM64, musl-based Linux, macOS, the web editor, Flatpak and Snap are outside the
 1. Download **CAC-PDF-Signer.plugin** from the release assets. The source ZIP is not an installable plugin.
 2. In ONLYOFFICE, open **Plugins > Plugin Manager > Install plugin manually** and select the file.
 3. Enable **CAC PDF Signer** under **Plugins > Background plugins**.
-4. Save and reopen the PDF, click an empty signature field, enter the CAC PIN and save the signed copy.
+4. Save and reopen the PDF. For an existing PDF signature field, click it, enter the CAC PIN and save the signed copy. For an ONLYOFFICE form signature box, switch to **Forms > Preview** and click the box to open an unsigned review PDF; check it, then click its signature field to enter the PIN and save.
 
 One `.plugin` file contains both signing runtimes. No separate Python installation or persistent signing service is required. Startup checks desktop availability and recovery storage before enabling signature clicks.
 
@@ -29,11 +29,13 @@ Turn the background plugin off before updating or removing it; reopen the PDF af
 
 ## Scope
 
-- Uses existing PDF signature fields; drawn rectangles and typed signature lines are unsupported.
+- Uses existing PDF signature fields and signature boxes in saved ONLYOFFICE PDF forms. Drawn rectangles and typed signature lines are unsupported.
 - Displays the certificate name, signing time, and rank and DoD ID when available. Text wraps and scales to the field.
 - Rejects encrypted PDFs, files over 40 MB, ambiguous fields and multiple eligible signing certificates.
 - Checks signature integrity. Certificate trust, revocation and trusted timestamping are outside its scope.
 - Leaves recovery copies in the user's application-data directory after uninstalling. Treat them as confidential documents.
+
+In form mode, the first click converts the editor's loaded PDF snapshot into a separate review copy with a standard PDF signature field. No card is used during that step. The second click signs the reviewed copy. The original form stays unchanged, and the signed copy no longer contains ONLYOFFICE's editable form package. Save and reopen form edits before starting; check the installed version's release notes for feature availability.
 
 ## Development
 

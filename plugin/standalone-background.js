@@ -35,28 +35,36 @@
     busy = true;
     lastError = "";
     try {
-      const source = adapter.snapshot(field);
-      const result = await client.call({
+      const source = await adapter.snapshot(field);
+      if (source.kind === "onlyoffice-form") {
+        const result = await client.call({
+          op: "prepare",
+          field,
+          name: source.name,
+          sourcePath: source.sourcePath,
+          pdf: base64(source.bytes),
+        });
+        if (!result.prepared || !/^[0-9a-f]{64}$/.test(result.sha256 || "") ||
+            result.field !== field + "_af_image" || !adapter.stillCurrent(source, field))
+          throw new Error("The PDF form changed during preparation. Reopen it before signing.");
+        openPdf(result.path);
+        completed.add(field);
+        return;
+      }
+      const request = {
         op: "sign",
         field,
-        pdf: base64(source.bytes),
         name: source.name,
         sourcePath: source.sourcePath,
-      });
+        pdf: base64(source.bytes),
+      };
+      const result = await client.call(request);
       if (result.cancelled) return;
       if (!result.saved || !result.integrityVerified)
         throw new Error("The signed copy could not be verified and saved.");
       completed.add(field);
       try {
-        if (typeof result.path !== "string" || !/\.pdf$/i.test(result.path))
-          throw new Error("The saved PDF path was not returned.");
-        // Open by path; the recent-file command expects an index.
-        const desktop = parent.AscDesktopEditor;
-        if (typeof desktop._openExternalReference !== "function")
-          throw new Error(
-            "This editor does not expose the native file opener.",
-          );
-        desktop._openExternalReference(result.path);
+        openPdf(result.path);
       } catch (_) {
         errorMessage(
           new Error("The signed PDF was saved. Open it from: " + result.path),
@@ -68,14 +76,34 @@
       busy = false;
     }
   }
+  function openPdf(path) {
+    if (typeof path !== "string" || !/\.pdf$/i.test(path))
+      throw new Error("The PDF path was not returned.");
+    const desktop = parent.AscDesktopEditor;
+    if (typeof desktop?._openExternalReference !== "function")
+      throw new Error("This editor does not expose the native file opener.");
+    desktop._openExternalReference(path);
+  }
+  async function formAdapter() {
+    let lastError;
+    for (let attempt = 0; attempt < 120 && !disposed; attempt++) {
+      try { return CACDesktop(parent); }
+      catch (error) {
+        if (!/needs a CAC adapter update/.test(error.message || "")) throw error;
+        lastError = error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    }
+    throw lastError || new Error("The ONLYOFFICE PDF form controls did not load.");
+  }
   Asc.plugin.init = async function () {
-    // PDF form creation uses the document editor; signing starts after reopening the saved PDF.
     const info = Asc.plugin.info || {};
-    if (info.editorType && info.editorType !== "pdf" && info.editorSubType !== "pdf") return;
+    const formPdf = info.editorType === "word" && /\.pdf$/i.test(info.documentTitle || "");
+    if (info.editorType && info.editorType !== "pdf" && info.editorSubType !== "pdf" && !formPdf) return;
     if (initialized || disposed) return;
     initialized = true;
     try {
-      adapter = CACDesktop(parent);
+      adapter = formPdf ? await formAdapter() : CACDesktop(parent);
       client = CACNativeClient();
       await client.call({ op: "preflight" });
       if (disposed) return;

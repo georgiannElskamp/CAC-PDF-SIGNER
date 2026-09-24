@@ -7,7 +7,15 @@ import sys
 import tempfile
 import unittest
 
-from editor_ci import stop_windows_editor
+from editor_ci import stop_windows_editor, supports_form_handoff
+
+
+class EditorVersionTests(unittest.TestCase):
+    def test_form_handoff_version_gate_accepts_prereleases(self):
+        self.assertFalse(supports_form_handoff("0.7.0-rc.6"))
+        self.assertFalse(supports_form_handoff("0.8.1"))
+        self.assertTrue(supports_form_handoff("0.9.0-rc.1"))
+        self.assertTrue(supports_form_handoff("0.9.0"))
 
 
 @unittest.skipUnless(sys.platform == "win32", "Windows process cleanup")

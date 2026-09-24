@@ -6,10 +6,16 @@ The `.plugin` archive contains the background JavaScript, Windows and Linux work
 
 1. The background script checks the editor adapter and runs desktop and recovery-storage preflight before attaching to PDF signature fields.
 2. A hidden `onlyoffice:` frame launches the worker through ONLYOFFICE's `ExternalProcess` API. Windows uses `native/cac-signer.exe`; Linux uses `launch-linux.sh` and `native/linux-x86_64/cac-signer`.
-3. The frames validate message origins. PDF bytes and the field name travel over standard input; the worker returns JSON events over standard output.
+3. The frames validate message origins. Both signing paths send PDF bytes captured from the active editor document; the local path is used only to protect the source from Save As overwrite. The worker returns JSON events over standard output.
 4. Windows signs through the CNG bridge or CryptoAPI for legacy CSP keys. Linux uses python-pkcs11 and OpenSC. A Windows mutex or Linux file lock serializes signing and Save As across editor tabs.
 5. The worker verifies the signed PDF, writes a recovery copy and opens a native Save As dialog. Cancelling preserves the completed signature for a later save attempt.
 6. The plugin acknowledges the result before the worker exits, avoiding the editor's process-output shutdown race. The acknowledgment wait is limited to ten seconds. After saving, the plugin opens the result through the editor's native file opener.
+
+ONLYOFFICE PDF form signature boxes export as image buttons rather than PDF `/Sig` fields. In Preview mode, the adapter recognizes the selected form control and intercepts its image-signature dialog. It reads the PDF snapshot from the editor's recovery directory, checks the active form and recovery metadata before and after reading, and sends those bytes to the worker. Edited forms must be saved and reopened first.
+
+The first click makes no card request. The worker copies the standard PDF objects, converts each empty signature button into a `/Sig` field while retaining its appearance, and stores a separate unsigned `CAC-review` PDF with a hash-bound handoff record under the user's `Prepared` directory. The plugin opens that PDF in ordinary PDF mode. After the user reviews it, the second click sends the review PDF's in-memory bytes to the worker for PIN entry, signing, verification and Save As. The worker rejects a changed or missing handoff and will not overwrite either the original form or review copy. The signed copy does not retain the editable form package. Existing signed forms are rejected because copying them would invalidate their signatures.
+
+The form adapter is pinned to Desktop Editors 9.4.0.129 internals. Its recovery snapshot is the PDF that ONLYOFFICE loaded, which may differ from a file subsequently changed on disk. The hosted form test clicks a real signature box and checks that the review PDF retains the loaded page content. It also tries to replace the source after load; the local Windows editor locked that file, so the Linux runner provides the replacement check.
 
 ## Platform integration
 

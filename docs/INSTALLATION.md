@@ -29,7 +29,15 @@ Keep Windows plugin installation paths below 260 characters. Spaces, Unicode and
 
 ## Sign
 
-Save and reopen the PDF, then click an empty signature field. Enter the CAC PIN when prompted and choose a location in **Save signed PDF as**. The signed copy opens in ONLYOFFICE.
+For a PDF with an existing signature field, save and reopen the document, click the empty field, enter the CAC PIN, and choose a location in **Save signed PDF as**. The signed copy opens in ONLYOFFICE.
+
+For a signature box created in an ONLYOFFICE PDF form:
+
+1. Save any edits, close and reopen the form, and select **Forms > Preview**.
+2. Click the empty signature box. The plugin opens a separate, unsigned **CAC-review** PDF. Check that its pages and signature field are correct. This step does not access the card.
+3. Click the field in the review PDF, enter the CAC PIN, and choose a new filename in **Save signed PDF as**. The signed copy opens in ONLYOFFICE.
+
+The original form stays unchanged. The review and signed copies are standard PDFs without the editable ONLYOFFICE form package. Reopen the original form to start a new attempt. Check the installed version's release notes for form support.
 
 The visible signature displays the certificate name, signing time, and rank and DoD ID when available. Text wraps and scales to the field dimensions. The card performs the private-key operation.
 
@@ -39,6 +47,8 @@ If Save As is cancelled, click the same field again to save the completed signat
 - Linux: `$XDG_DATA_HOME/ONLYOFFICE-CAC-Signature/Signed`, or `~/.local/share/ONLYOFFICE-CAC-Signature/Signed`
 
 These files contain signed documents and identity details. Uninstalling the plugin does not remove them.
+
+Unsigned form review copies and their handoff records are stored in the same application-data directory under `Prepared`. The worker prunes review copies older than 30 days when another form is prepared. Delete them sooner if you no longer need them; they may contain confidential form content.
 
 ## Troubleshooting
 
@@ -52,8 +62,10 @@ These files contain signed documents and identity details. Uninstalling the plug
 | Reader or certificate unavailable | Confirm the reader is connected and accessible to this OS account. Windows needs its card provider; Linux needs USB or system PC/SC access. |
 | Recovery folder cannot be written | Check permissions and free space before retrying. |
 | PDF must be reopened | Save changes and close/reopen the PDF so the editor loads the saved bytes. |
+| ONLYOFFICE form box shows the image-signature dialog | Enable the background plugin, save and reopen the form, and switch to **Forms > Preview** before clicking the box. |
+| Review PDF opens without a PIN prompt | This is expected. Check the review copy and click its standard signature field to sign. |
 
-The plugin requires an existing PDF signature field. It rejects encrypted PDFs, files over 40 MB, hidden or ambiguous fields, multiple eligible certificates and unsupported certificate-name characters. Bundled fonts cover additional Latin, Greek, Cyrillic and CJK text; other scripts and right-to-left layout are unvalidated.
+Versions without ONLYOFFICE form support require an existing PDF signature field. Both paths reject encrypted PDFs, files over 40 MB, hidden or ambiguous fields, multiple eligible certificates and unsupported certificate-name characters. Bundled fonts cover additional Latin, Greek, Cyrillic and CJK text; other scripts and right-to-left layout are unvalidated.
 
 Verification checks signature integrity. Certificate trust, revocation and trusted timestamping are outside its scope; signing time uses the local clock.
 

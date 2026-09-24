@@ -46,6 +46,35 @@ class PipelinePolicyTests(unittest.TestCase):
         self.assertEqual(policy.next_version('1.9.8', 'patch'), '1.9.9')
         with self.assertRaises(ValueError): policy.next_version('main', 'minor')
 
+    def test_release_notes_include_changes_merged_before_prior_publication(self):
+        first, second = '1' * 40, '2' * 40
+        merged = [
+            {'number': 19, 'title': 'Sign ONLYOFFICE form boxes',
+             'merged_at': '2026-09-23T19:00:51Z', 'merge_commit_sha': first,
+             'labels': [{'name': 'release:minor'}]},
+            {'number': 21, 'title': 'Sync accepted release',
+             'merged_at': '2026-09-23T19:54:50Z', 'merge_commit_sha': second,
+             'labels': []},
+        ]
+        comparison = {'status': 'ahead', 'ahead_by': 2, 'behind_by': 0}
+        with patch.object(pipeline, 'api', return_value=comparison), \
+             patch.object(pipeline, 'pages', return_value=[{'sha': first}, {'sha': second}]):
+            relevant = pipeline.merged_since_snapshot(SHA, MAIN, merged)
+        self.assertEqual([p['number'] for p in relevant], [19, 21])
+        notes = pipeline.release_notes('0.9.0', MAIN, relevant)
+        self.assertIn('form boxes (#19)', notes)
+        self.assertNotIn('pending', notes)
+        self.assertNotIn('approval', notes)
+        with patch.object(pipeline, 'api', return_value={**comparison, 'behind_by': 1}), \
+             patch.object(pipeline, 'pages') as commits:
+            with self.assertRaisesRegex(RuntimeError, 'not an ancestor'):
+                pipeline.merged_since_snapshot(SHA, MAIN, merged)
+            commits.assert_not_called()
+        with patch.object(pipeline, 'api', return_value=comparison), \
+             patch.object(pipeline, 'pages', return_value=[{'sha': first}]):
+            with self.assertRaisesRegex(RuntimeError, 'incomplete'):
+                pipeline.merged_since_snapshot(SHA, MAIN, merged)
+
     def test_pinned_action_updates_cannot_smuggle_workflow_changes(self):
         old = 'uses: actions/checkout@' + 'a' * 40 + ' # v1\n'
         new = 'uses: actions/checkout@' + 'b' * 40 + ' # v2\n'

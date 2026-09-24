@@ -156,6 +156,10 @@ function hostTest() {
     data: { ...event.data, request: { op: "execute", command: "bad" } },
   });
   assert.match(h.sent.at(-1).result.error, /Unknown/);
+  const prepare = harness("native-host.js");
+  prepare.handlers.message({ ...event, source: prepare.context.parent,
+    data: { ...event.data, request: { op: "prepare", pdf: "JVBERi0=", field: "Signature1" } } });
+  assert(prepare.context.process, "A card-free prepare request must reach the bundled worker.");
   const crash = harness("native-host.js");
   crash.handlers.message({
     ...event,
@@ -305,8 +309,10 @@ async function backgroundTest() {
   await first;
   assert.equal(opened.length, 0);
   const retry = click("PreparedBy");
+  await Promise.resolve();
   assert.equal(requests.length, 2);
   assert.equal(requests[1].op, "sign");
+  assert.ok(requests[1].pdf);
   finish({
     saved: true,
     integrityVerified: true,

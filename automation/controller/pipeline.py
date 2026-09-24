@@ -321,10 +321,33 @@ def release_body(candidate, build=None):
         text += f"[Download the tested candidate and reports]({build['html_url']}). The candidate artifact contains `CAC-PDF-Signer.plugin`, its checksum and component inventory.\n\n"
     else:
         text += "The final candidate build is pending.\n\n"
-    return text + ("Coverage includes Windows hosted installation/CNG, Linux installation/restart, simulated CAC signing, "
-        "PDF integrity/layout and recovery failures. Windows standard-user profile initialization remains a diagnostic "
-        "limit; physical reader/CAC coverage is not established by simulation. See docs/TESTING.md.\n\n"
-        "After the approved merge, publication promotes the same tested bytes. If the candidate changes, tests and approval must be repeated.")
+    return text + coverage_text() + "\n\nAfter the approved merge, publication promotes the same tested bytes. If the candidate changes, tests and approval must be repeated."
+
+
+def coverage_text():
+    return ("Coverage includes Windows/Linux hosted installation and form review handoff, Windows CNG, "
+        "Linux restart and simulated CAC signing, PDF integrity/layout and recovery failures. "
+        "Windows standard-user profile initialization remains a diagnostic "
+        "limit; physical reader/CAC coverage is not established by simulation. See docs/TESTING.md.")
+
+
+def merged_since_snapshot(base, research, merged):
+    comparison = api(REPO + f"/compare/{base}...{research}")
+    if comparison["behind_by"] or comparison["status"] not in ("ahead", "identical"):
+        raise RuntimeError("The accepted research snapshot is not an ancestor of research")
+    commits = pages(REPO + f"/compare/{base}...{research}", key="commits")
+    included = {commit["sha"] for commit in commits}
+    if len(commits) != comparison["ahead_by"] or len(included) != len(commits):
+        raise RuntimeError("The research comparison is incomplete")
+    return sorted((p for p in merged if p.get("merged_at") and p.get("merge_commit_sha") in included),
+                  key=lambda p: p["merged_at"])
+
+
+def release_notes(version, research, relevant):
+    changes = "\n".join(f"- {p['title']} (#{p['number']})" for p in relevant)
+    return (f"# Release {version}\n\nChanges through research commit `{research}`.\n\n"
+            + (changes or "- Integrate the tested research changes and release workflow.")
+            + "\n\n" + coverage_text() + "\n")
 
 
 def promote(state, release_type="auto", dry_run=False):
@@ -394,7 +417,9 @@ def promote(state, release_type="auto", dry_run=False):
         return
     kind = "minor" if release_type == "auto" else release_type
     merged = pages(REPO + "/pulls?state=closed&base=research&sort=updated&direction=desc")
-    relevant = [p for p in merged if p.get("merged_at") and p["merged_at"] > latest["published_at"]]
+    if not accepted or not accepted.get("research"):
+        raise RuntimeError("The last accepted research snapshot is missing")
+    relevant = merged_since_snapshot(accepted["research"], research, merged)
     labels = {label["name"] for p in relevant for label in p.get("labels", [])}
     if release_type == "auto":
         kind = next((level for level in ("major", "minor", "patch") if "release:" + level in labels), "minor")
@@ -407,10 +432,7 @@ def promote(state, release_type="auto", dry_run=False):
     runtime, count = re.subn(r'(?m)^VERSION = "[^"\n]+"$', 'VERSION = "' + version + '"', runtime)
     if count != 1:
         raise RuntimeError("Worker version declaration changed")
-    notes = "# Release " + version + "\n\n"
-    notes += f"Changes through research commit `{research}`.\n\n"
-    notes += "\n".join(f"- {p['title']} (#{p['number']})" for p in relevant) or "- Integrate the tested research changes and release workflow."
-    notes += "\n\n" + release_body(candidate) + "\n"
+    notes = release_notes(version, research, relevant)
     files = {"plugin/config.json": json.dumps(config, indent=2) + "\n", "runtime_config.py": runtime,
              "docs/RELEASE_NOTES.md": notes, ".github/release-candidate.json": json.dumps(candidate, indent=2) + "\n"}
     state.data["candidate"] = {**candidate, "state": "staging"}

@@ -14,6 +14,7 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.x509.oid import NameOID
 from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
+from pyhanko.pdf_utils import generic
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import fields, signers
 from pyhanko.sign.validation import validate_pdf_signature
@@ -21,6 +22,8 @@ from pyhanko_certvalidator import ValidationContext
 from pyhanko_certvalidator.registry import SimpleCertificateStore
 from reportlab.pdfgen import canvas
 from visible_signature import certificate_details, signature_text
+from form_fixture import form_pdf
+from onlyoffice_form import prepare_signature
 
 
 class SignatureTests(unittest.TestCase):
@@ -110,6 +113,74 @@ class SignatureTests(unittest.TestCase):
         self.assertEqual(details["name"], "ALEX EXAMPLE")
         self.assertEqual(details["dodId"], "0000000000")
         self.assertNotIn("Rank:", signature_text(details)[0])
+
+    def test_onlyoffice_form_box_becomes_valid_signature(self):
+        pdf, unsigned_appearance = form_pdf("PDF LAYER ONLY - review before signing")
+        writer, field = prepare_signature(pdf, "Signature1")
+        prepared_stream = io.BytesIO()
+        writer.write(prepared_stream)
+        prepared = prepared_stream.getvalue()
+        self.assertIn(b"PDF LAYER ONLY", PdfFileReader(io.BytesIO(prepared)).root[
+            "/Pages"]["/Kids"][0].get_object()["/Contents"].data)
+        signed = signing.sign_bytes(prepared, self.signer, {"field": field})
+        self.assertTrue(signed.startswith(prepared))
+        reader = PdfFileReader(io.BytesIO(signed))
+        (signature,) = reader.embedded_signatures
+        status = validate_pdf_signature(signature, signer_validation_context=ValidationContext(
+            trust_roots=[self.cert], allow_fetching=False,
+        ))
+        self.assertTrue(status.intact and status.valid)
+        self.assertEqual(signature.field_name, "Signature1_af_image")
+        self.assertEqual([float(n) for n in signature.sig_field["/Rect"]], [70, 688, 224, 720])
+        self.assertNotIn(b"/MetaOForm", signed)
+        self.assertNotIn(b"/ONLYOFFICEFORM", signed)
+        self.assertNotIn(b"word/document.xml", signed)
+        self.assertNotIn("/A", signature.sig_field)
+        signature_fields = list(fields.enumerate_sig_fields(reader))
+        self.assertEqual(
+            [field_name for field_name, _, _ in signature_fields],
+            ["Signature1_af_image", "Signature2_af_image"],
+        )
+        self.assertIsNone(signature_fields[1][1])
+        self.assertNotIn("/A", signature_fields[1][2].get_object())
+        self.assertEqual(
+            signature_fields[1][2].get_object()["/AP"]["/N"].data,
+            unsigned_appearance,
+        )
+        self.assertNotEqual(signature.sig_field["/AP"]["/N"].data, unsigned_appearance)
+        image_field = list(fields.enumerate_fields_in(
+            reader.root["/AcroForm"]["/Fields"], with_name="Image1_af_image",
+            refs_seen=set(), target_field_type="/Btn",
+        ))
+        self.assertEqual(len(image_field), 1)
+        self.assertEqual(image_field[0][2].get_object()["/A"]["/S"], "/JavaScript")
+        self.assertEqual(
+            image_field[0][2].get_object()["/AP"]["/N"].data,
+            unsigned_appearance,
+        )
+        twice_signed = signing.sign_bytes(signed, self.signer, {
+            "field": "Signature2_af_image",
+        })
+        self.assertEqual(len(PdfFileReader(io.BytesIO(twice_signed)).embedded_signatures), 2)
+        missing_appearance = IncrementalPdfFileWriter(io.BytesIO(pdf))
+        second = next(ref.get_object() for field_name, _, ref in fields.enumerate_fields_in(
+            missing_appearance.root["/AcroForm"]["/Fields"],
+            with_name="Signature2_af_image", refs_seen=set(), target_field_type="/Btn",
+        ) if field_name == "Signature2_af_image")
+        second.pop("/AP")
+        missing_appearance.update_container(second)
+        broken_pdf = io.BytesIO()
+        missing_appearance.write(broken_pdf)
+        with self.assertRaisesRegex(ValueError, "no usable appearance"):
+            signing.sign_bytes(broken_pdf.getvalue(), self.signer, {
+                "kind": "onlyoffice-form", "field": "Signature1",
+            })
+        with self.assertRaisesRegex(ValueError, "not a saved ONLYOFFICE"):
+            signing.sign_bytes(self.pdf, self.signer, {"kind": "onlyoffice-form", "field": "Signature1"})
+        with self.assertRaisesRegex(ValueError, "not an ONLYOFFICE signature box"):
+            signing.sign_bytes(pdf, self.signer, {"kind": "onlyoffice-form", "field": "Other"})
+        with self.assertRaisesRegex(ValueError, "not an ONLYOFFICE signature box"):
+            signing.sign_bytes(pdf, self.signer, {"kind": "onlyoffice-form", "field": "Image1"})
 
     def test_card_selection_is_mocked(self):
         self.assertIs(

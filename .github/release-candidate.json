@@ -1,8 +1,8 @@
 {
-  "version": "0.8.1",
-  "type": "patch",
-  "research": "0ae45e36b8237b8625dac46c9b67bd65bf9c2ae6",
-  "baseMain": "acf8a6874b5633c5fa575fb971b3e4a2a0abc5c6",
-  "researchRun": 35889100816,
-  "previousTag": "v0.8.0"
+  "version": "0.9.0",
+  "type": "minor",
+  "research": "9c18593ae6953a3b06412534da54557bd4eb58c9",
+  "baseMain": "b5c951c1699f24a1e884a5cb5dba8bbc1fc19230",
+  "researchRun": 35985796824,
+  "previousTag": "v0.8.1"
 }

@@ -1,8 +1,8 @@
 /* Run only against a disposable ONLYOFFICE profile and the generated fixture. */
 const fs = require("node:fs");
 const assert = require("node:assert/strict");
+const { connect, until } = require("./editor_cdp");
 const GUID = "asc.{9A58C737-A6B4-4E31-8D3F-2C940B716EF9}";
-const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function fixture(destination) {
   const objects = [
@@ -24,67 +24,15 @@ function fixture(destination) {
   fs.writeFileSync(destination, pdf);
 }
 
-async function until(probe, message, timeout = 90000) {
-  const deadline = Date.now() + timeout;
-  while (Date.now() < deadline) {
-    const value = await probe();
-    if (value) return value;
-    await delay(500);
-  }
-  throw new Error(message);
-}
-
-async function smoke(port, packagePath, version) {
-  const page = await until(async () => {
-    try {
-      const response = await fetch(`http://127.0.0.1:${port}/json/list`, { signal: AbortSignal.timeout(2000) });
-      return (await response.json()).find((p) => p.url.includes("doctype=pdf"));
-    } catch (_) { return null; }
-  }, "The PDF editor did not open.");
-  const socket = new WebSocket(page.webSocketDebuggerUrl);
-  await new Promise((resolve, reject) => { socket.onopen = resolve; socket.onerror = reject; });
-  let sequence = 0;
-  const pending = new Map(), contexts = new Set();
-  socket.onmessage = ({ data }) => {
-    const message = JSON.parse(data);
-    if (message.method === "Runtime.executionContextCreated") contexts.add(message.params.context.id);
-    if (message.method === "Runtime.executionContextDestroyed") contexts.delete(message.params.executionContextId);
-    const request = pending.get(message.id);
-    if (request) {
-      pending.delete(message.id);
-      clearTimeout(request.timer);
-      message.error ? request.reject(new Error(message.error.message)) : request.resolve(message.result);
-    }
-  };
-  function call(method, params) {
-    const id = ++sequence;
-    return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { pending.delete(id); reject(new Error(`${method} timed out`)); }, 125000);
-      pending.set(id, { resolve, reject, timer });
-      socket.send(JSON.stringify({ id, method, params }));
-    });
-  }
-  async function evaluate(contextId, expression) {
-    const reply = await call("Runtime.evaluate", { contextId, expression, awaitPromise: true, returnByValue: true, timeout: 120000 });
-    if (reply.exceptionDetails) throw new Error(reply.exceptionDetails.exception?.description || reply.exceptionDetails.text);
-    return reply.result.value;
-  }
-  let context, installed = false;
+async function smoke(port, packagePath, version, fixtureName) {
+  const editor = await connect(port, (p) => p.url.includes("doctype=pdf") &&
+    (!fixtureName || new URL(p.url).searchParams.get("title") === fixtureName),
+    "typeof PDFE !== 'undefined' && typeof Asc !== 'undefined' && !!Asc.editor && typeof AscDesktopEditor !== 'undefined'");
+  const { run } = editor;
+  let installed = false;
   let stage = "editor startup";
   const progress = (value) => { stage = value; console.log(`Checking: ${stage}`); };
-  const run = (fn, ...args) => evaluate(context, `(${fn.toString()})(${args.map((a) => JSON.stringify(a)).join(",")})`);
   try {
-    await call("Runtime.enable");
-    context = await until(async () => {
-      for (const id of contexts) {
-        try {
-          if (await evaluate(id, "typeof PDFE !== 'undefined' && typeof Asc !== 'undefined' && !!Asc.editor && typeof AscDesktopEditor !== 'undefined'")) return id;
-        } catch (error) {
-          if (!/context.*(find|destroy)|find.*context/i.test(error.message)) throw error;
-        }
-      }
-      return null;
-    }, "The PDF editor context is unavailable (startup or harness failure).");
     progress("adapter interface discovery");
     await until(() => run(() => !!Asc.editor?.jf?.file?.Mp && typeof Asc.editor.jf.Qd === "function"),
       "Unsupported PDF interface: inspect both the plugin adapter and test harness before diagnosing compatibility.");
@@ -144,20 +92,19 @@ async function smoke(port, packagePath, version) {
   } catch (error) {
     throw new Error(`${stage}: ${error.message}`, { cause: error });
   } finally {
-    if (installed && context) await run((guid) => {
+    if (installed) await run((guid) => {
       Asc.editor.asc_pluginStop(guid);
       AscDesktopEditor.PluginUninstall(guid, false);
     }, GUID).catch(() => {});
-    socket.close();
-    for (const request of pending.values()) clearTimeout(request.timer);
+    editor.close();
   }
 }
 
 const args = process.argv.slice(2);
 if (args[0] === "--fixture" && args.length === 2) fixture(args[1]);
-else if (args.length === 4 && args[0] === "--disposable-profile" && /^\d+$/.test(args[1])) {
-  smoke(Number(args[1]), args[2], args[3]).catch((error) => { console.error(error.message); process.exitCode = 1; });
+else if ((args.length === 4 || args.length === 5) && args[0] === "--disposable-profile" && /^\d+$/.test(args[1])) {
+  smoke(Number(args[1]), args[2], args[3], args[4]).catch((error) => { console.error(error.message); process.exitCode = 1; });
 } else {
-  console.error("Usage: node tests/editor_smoke.js --fixture <pdf>\n       node tests/editor_smoke.js --disposable-profile <debug-port> <native-package-path> <version>");
+  console.error("Usage: node tests/editor_smoke.js --fixture <pdf>\n       node tests/editor_smoke.js --disposable-profile <debug-port> <native-package-path> <version> [fixture-name]");
   process.exitCode = 2;
 }
