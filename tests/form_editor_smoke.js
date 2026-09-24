@@ -130,16 +130,16 @@ async function check(port, packagePath, sourcePath, replacementPath, statePath, 
       const names = fs.readdirSync(preparedDirectory).filter((name) => /^CAC-review-[0-9a-f]{32}\.pdf$/.test(name));
       return names.length === 1 ? path.join(preparedDirectory, names[0]) : null;
     }, "The form click did not produce an unsigned review PDF.");
+    review = await connect(port, (page) => {
+      try { return new URL(page.url).searchParams.get("title") === path.basename(prepared); }
+      catch (_) { return false; }
+    }, "typeof Asc !== 'undefined' && !!Asc.editor && !!Asc.editor.jf?.file?.Mp");
     const metadata = JSON.parse(fs.readFileSync(prepared.replace(/\.pdf$/, ".json"), "utf8"));
     assert.equal(metadata.field, "Signature1_af_image");
     assert.equal(metadata.sha256, sha256(fs.readFileSync(prepared)));
     assert.equal(metadata.source.replace(/\\/g, "/"), sourcePath.replace(/\\/g, "/"));
     assert.equal(fs.readFileSync(prepared).includes(Buffer.from("/MetaOForm")), false);
 
-    review = await connect(port, (page) => {
-      try { return new URL(page.url).searchParams.get("title") === path.basename(prepared); }
-      catch (_) { return false; }
-    }, "typeof Asc !== 'undefined' && !!Asc.editor && !!Asc.editor.jf?.file?.Mp");
     const visible = await until(() => review.run(() =>
       Asc.editor.jf.file.Mp.getInteractiveFormsInfo()?.Fields?.filter((field) => field.type === 33)
         .map((field) => ({ name: field.name, signed: !!field.Sig }))),
