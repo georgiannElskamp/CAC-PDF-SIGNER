@@ -28,6 +28,8 @@ def head(branch):
 
 def status(sha, state, description, url=None, context="Research review"):
     body = {"context": context, "state": state, "description": description[:140]}
+    if not url and os.environ.get("GITHUB_RUN_ID", "").isdigit():
+        url = f"https://github.com/{OWNER}/cac-pdf-signer-automation/actions/runs/" + os.environ["GITHUB_RUN_ID"]
     if url:
         body["target_url"] = url
     api(REPO + "/statuses/" + sha, "POST", body)
@@ -227,6 +229,8 @@ def process_pull(state, pull, dry_run=False):
     if ci == "failed":
         repair(state, root, record, pull, ", ".join(failures))
         return
+    if not record.get("review"):
+        status(sha, "pending", "Requesting Codex review of the current commit")
     result = review(state, record, pull)
     if result == "findings":
         repair(state, root, record, pull, "the fresh Codex review findings on this exact commit")
@@ -235,15 +239,16 @@ def process_pull(state, pull, dry_run=False):
         failed = result in {"ambiguous", "unavailable"} or expired(record["review"]["created_at"])
         status(sha, "failure" if failed else "pending", "Codex review: " + result)
         return
-    if any(label["name"] == "automation:no-merge" for label in pull.get("labels", [])):
-        status(sha, "pending", "Tests and review passed; automatic merge is held by label")
-        return
     latest = api(REPO + f"/pulls/{number}")
     if (not eligible(latest) or latest["head"]["sha"] != sha or latest["base"]["sha"] != pull["base"]["sha"]
             or (blocked and not owner_approved(latest))
             or ci_state(latest)[0] != "passed"):
         return
-    status(sha, "success", "Fresh Codex review and complete tests passed")
+    held = any(label["name"] == "automation:no-merge" for label in latest.get("labels", []))
+    status(sha, "success", "Tests and review passed; manual merge available" if held
+           else "Fresh Codex review and complete tests passed")
+    if held:
+        return
     try:
         result = api(REPO + f"/pulls/{number}/merge", "PUT", {"sha": sha, "merge_method": "merge"})
     except urllib.error.HTTPError as error:
@@ -375,8 +380,10 @@ def promote(state, release_type="auto", dry_run=False):
         if not existing and not dry_run:
             if not optional(REPO + "/git/ref/heads/" + sync_branch):
                 api(REPO + "/git/refs", "POST", {"ref": "refs/heads/" + sync_branch, "sha": main})
-            api(REPO + "/pulls", "POST", {"head": sync_branch, "base": "research", "title": "Sync accepted release into research",
+            sync = api(REPO + "/pulls", "POST", {"head": sync_branch, "base": "research", "title": "Sync accepted release into research",
                 "body": "Carry the maintainer-approved release/version changes back into research. No release is published by this PR."})
+            status(main, "pending", "Waiting for the sync PR tests and Codex review")
+            print(f"Created research sync PR #{sync['number']}; review pending", flush=True)
         return
     if api(REPO + "/git/commits/" + research)["tree"]["sha"] == api(REPO + "/git/commits/" + main)["tree"]["sha"]:
         return

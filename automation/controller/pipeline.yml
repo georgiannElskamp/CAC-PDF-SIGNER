@@ -4,6 +4,10 @@ on:
     - cron: '17,47 * * * *'
   workflow_dispatch:
     inputs:
+      event_wakeup:
+        description: Event notification; requires PIPELINE_ENABLED
+        type: boolean
+        default: false
       dry_run:
         description: Inspect eligibility without posting requests or changing branches
         type: boolean
@@ -24,7 +28,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   reconcile:
-    if: github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || vars.PIPELINE_ENABLED == 'true')
+    if: github.ref == 'refs/heads/main' && ((github.event_name == 'workflow_dispatch' && !inputs.event_wakeup) || vars.PIPELINE_ENABLED == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
