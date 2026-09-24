@@ -124,6 +124,25 @@ class WakeupTests(unittest.TestCase):
 
 
 class ResearchGateTests(unittest.TestCase):
+    def test_notification_sweep_does_not_starve_the_sixth_approved_pr(self):
+        pulls = [dict(pull(), number=number) for number in range(1, 7)]
+        unrelated = pull(); unrelated["number"] = 7; unrelated["user"]["login"] = "unknown"
+        state = Mock(data={"pulls": {}})
+        def pages(path, **kwargs):
+            return pulls + [unrelated] if "base=research" in path else []
+        def api(path, **kwargs):
+            if path == "/user":
+                return {"login": policy.OWNER}
+            number = int(path.rsplit("/", 1)[1])
+            self.assertNotEqual(number, 7)
+            return pulls[number - 1]
+        with patch.dict(os.environ, {"GITHUB_REPOSITORY": policy.OWNER + "/cac-pdf-signer-automation"}), \
+             patch.object(sys, "argv", ["pipeline.py"]), patch.object(pipeline, "State", return_value=state), \
+             patch.object(pipeline, "pages", side_effect=pages), patch.object(pipeline, "api", side_effect=api), \
+             patch.object(pipeline, "reconcile_pull") as reconcile, patch.object(pipeline, "promote"):
+            pipeline.main()
+        self.assertEqual([call.args[1]["number"] for call in reconcile.call_args_list], list(range(1, 7)))
+
     def process(self, value, latest=None, review="clean"):
         state = Mock(data={"pulls": {}})
         with patch.object(pipeline, "policy_changes", return_value=[]), \

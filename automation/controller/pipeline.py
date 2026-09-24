@@ -473,7 +473,9 @@ def main():
                     api(REPO + f"/pulls/{pull['number']}", "PATCH", {"base": "research"})
                 print(f"Dependency PR #{pull['number']} routed to research", flush=True)
     pulls = [api(REPO + f"/pulls/{args.pull}")] if args.pull else pages(REPO + "/pulls?state=open&base=research")
-    for pull in pulls[:5]:
+    for pull in pulls:
+        if not eligible(pull):
+            continue
         if not args.pull:
             pull = api(REPO + f"/pulls/{pull['number']}")
         reconcile_pull(state, pull, args.dry_run)
