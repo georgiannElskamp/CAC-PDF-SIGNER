@@ -1,0 +1,32 @@
+name: Research controller wakeup
+on:
+  issue_comment:
+    types: [created, edited]
+  workflow_run:
+    workflows: [Research PR activity, Checks, Dependency review, Runtime change validation]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      pull:
+        description: Research PR number to wake the controller for
+        type: string
+        required: true
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  notify:
+    if: vars.PIPELINE_WAKEUP_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    environment: controller-dispatch
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: refs/heads/main
+          persist-credentials: false
+      - name: Notify the private controller
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTROLLER_DISPATCH_TOKEN: ${{ secrets.CONTROLLER_DISPATCH_TOKEN }}
+        run: python3 -B automation/controller/wakeup.py
