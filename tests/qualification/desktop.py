@@ -63,7 +63,7 @@ def check():
                     outcomes.append({"mode":mode,"exitCode":result.returncode})
                 finally:
                     if sys.platform=="win32":
-                        stop_windows_editor(editor.parent)
+                        stop_windows_editor(editor.parent, child)
                     else:
                         try:os.killpg(child.pid,signal.SIGTERM)
                         except ProcessLookupError:pass
