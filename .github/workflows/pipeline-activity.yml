@@ -1,0 +1,18 @@
+name: Research PR activity
+run-name: Research PR ${{ github.event.pull_request.number }}
+on:
+  pull_request_target:
+    branches: [research]
+    types: [opened, synchronize, reopened, ready_for_review, edited, labeled, unlabeled]
+  pull_request_review:
+    types: [submitted, edited, dismissed]
+  pull_request_review_comment:
+    types: [created, edited]
+permissions: {}
+jobs:
+  signal:
+    if: github.event.pull_request.base.ref == 'research'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    steps:
+      - run: echo 'Research PR activity received'

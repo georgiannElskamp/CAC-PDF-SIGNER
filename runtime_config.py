@@ -4,7 +4,7 @@ import os
 import sys
 from pathlib import Path
 
-VERSION = "0.9.0"
+VERSION = "0.9.1"
 MAX_PDF = 40 * 1024 * 1024
 APP_NAME = "ONLYOFFICE-CAC-Signature"
 

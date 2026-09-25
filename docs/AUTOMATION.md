@@ -12,7 +12,18 @@ Research builds create temporary internal packages because installation/signing 
 
 ## Research controller
 
-The private [maintenance repository](https://github.com/georgiannElskamp/cac-pdf-signer-automation) checks research PRs twice an hour. Scheduling is best effort. `PIPELINE_ENABLED=false` disables scheduled processing; manual runs default to dry-run. `AUTOMATION_ENABLED` independently controls daily editor discovery. Both controllers retain progress on the private `state` branch.
+The private [maintenance repository](https://github.com/georgiannElskamp/cac-pdf-signer-automation) processes research PRs after PR activity, approvals, Codex replies and completed test workflows. A twice-hourly schedule provides a fallback; GitHub schedules can be delayed. `PIPELINE_ENABLED=false` disables scheduled and event-driven processing; explicit manual runs default to dry-run. `AUTOMATION_ENABLED` independently controls daily editor discovery. Both controllers retain progress on the private `state` branch.
+
+The public **Research PR activity** workflow carries no credentials and runs no PR code. Its completion, test completion and relevant PR comments wake **Research controller wakeup** on the default branch. That workflow reads only `main`, rechecks the PR through GitHub's API, and dispatches the private controller. Each notification requests a complete sweep so coalesced pending runs do not lose another PR's approval. The controller independently verifies every merge requirement.
+
+To enable event notifications after these workflows reach `main`:
+
+1. Create a public-repository environment named `controller-dispatch`. Use selected deployment branches and allow only `main`, with branch type (no tags).
+2. Store `CONTROLLER_DISPATCH_TOKEN` as an **environment secret**, not a repository secret. Use a fine-grained token restricted to `cac-pdf-signer-automation`, with only Actions read/write and implicit Metadata read. Track its expiry and replace it before it expires. Do not use the maintainer's general token or the signing App's private key.
+3. Deploy the controller template's `pipeline.yml` to the private repository, then set public variable `PIPELINE_WAKEUP_ENABLED=true`. Keep private `PIPELINE_ENABLED=true`.
+4. Run **Research controller wakeup** for an open research PR and verify the private run and linked `Research review` status. Test approval and Codex completion notifications before relying on unattended merging.
+
+GitHub's repository-wide native auto-merge remains disabled to preserve manual release merges. The private controller merges eligible research PRs automatically. Normal web merging is available when required statuses pass. A maintainer approval does not replace the `Research review` check. That check links to the controller run; an absent check means the PR has not yet been evaluated. For recovery, run the private controller with the PR number and dry-run disabled, then run it again after any pending tests or Codex review finish.
 
 The controller accepts same-repository PRs from the maintainer, Dependabot, Codex, the maintenance App, and narrowly scoped editor-pin proposals. It requires the full test matrix, a current base, and a completed Codex review tied to the current commit. A reaction alone is insufficient. Missing evidence, stale reviews, conflicts and cancelled jobs block merging. Tests run again after any correction.
 
@@ -20,7 +31,7 @@ If a cloud task cannot push its correction, it can return a structured patch. Th
 
 A failed test or actionable review can request a small correction through the linked maintainer account. There are at most two correction requests per PR. Requests are recorded before posting; an uncertain response is not retried blindly. A request without progress expires after six hours. Codex can decline a task, hit a quota, or lack permission to push; those cases need maintainer attention. No API key or desktop login is copied into CI.
 
-The `automation:no-merge` label holds automatic merging while allowing tests, review and bounded corrections. Remove it only when the PR is ready for research integration. A rejected or ambiguous repair marks only that PR commit as needing attention; other PRs and release promotion continue. Push a reviewed correction to that PR, or inspect its saved state before explicitly resuming the blocked commit.
+The `automation:no-merge` label holds automatic merging while allowing tests, review and bounded corrections. Once tests and review pass, `Research review` succeeds and the maintainer can merge from the web. Remove the label to permit automatic integration. A rejected or ambiguous repair marks only that PR commit as needing attention; other PRs and release promotion continue. Push a reviewed correction to that PR, or inspect its saved state before explicitly resuming the blocked commit.
 
 Approval rules, controller code, release scripts and workflow structure require the owner's approval on the current research PR commit before automated processing. Codex is instructed not to change that policy during repairs; a changed commit needs renewed approval. The controller rechecks approval immediately before merging. Private controller deployment remains a separate manual maintenance step. Dependabot changes to pinned action revisions are allowed only if the rest of the workflow is unchanged. Native dependency reports remain advisory. Repository text and test output are untrusted inputs to diagnosis, not authority to modify these boundaries.
 
