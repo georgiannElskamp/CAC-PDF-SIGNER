@@ -16,11 +16,46 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from automation import download, validate_manifest
 
 
-def stop_windows_editor(directory):
+def _windows_editor_process_ids(directory, launcher_pid, processes):
+    """Return the live launcher and descendants owned by this test session."""
+    root = Path(directory).resolve(strict=True)
+    by_identifier = {int(process["ProcessId"]): process for process in processes}
+    launcher = by_identifier.get(launcher_pid)
+    targets = set()
+    if launcher is not None:
+        path = launcher.get("ExecutablePath")
+        if not path:
+            return targets
+        try:
+            executable = Path(path).resolve(strict=True)
+        except OSError:
+            return targets
+        # A live process with a different image means the launcher's PID was
+        # reused.  Its descendants are not ours and must not be terminated.
+        if root not in executable.parents:
+            return targets
+        targets.add(launcher_pid)
+
+    # Keep an exited launcher as an ancestry marker: Windows retains its PID
+    # as ParentProcessId on the detached editor processes it created.
+    ancestry = {launcher_pid}
+    while True:
+        descendants = {
+            identifier for identifier, process in by_identifier.items()
+            if int(process["ParentProcessId"]) in ancestry
+        }
+        new = descendants - ancestry
+        if not new:
+            break
+        ancestry.update(new)
+        targets.update(new)
+    return targets
+
+
+def stop_windows_editor(directory, launcher_pid):
     import _winapi
 
     # The launcher can exit before its editor and helper processes.
-    root = Path(directory).resolve(strict=True)
     powershell = ["powershell", "-NoProfile", "-NonInteractive", "-Command"]
     inventory = subprocess.run(powershell + [
         "[Console]::OutputEncoding=[Text.UTF8Encoding]::new(); "
@@ -28,22 +63,7 @@ def stop_windows_editor(directory):
         "Select-Object ProcessId,ParentProcessId,ExecutablePath)"
     ], check=True, timeout=30, capture_output=True, encoding="utf-8")
     processes = json.loads(inventory.stdout)
-    identifiers = set()
-    for process in processes:
-        path = process.get("ExecutablePath")
-        if not path:
-            continue
-        try:
-            executable = Path(path).resolve(strict=True)
-        except OSError:
-            continue
-        if root in executable.parents:
-            identifiers.add(int(process["ProcessId"]))
-    while True:
-        descendants = {int(p["ProcessId"]) for p in processes if p["ParentProcessId"] in identifiers}
-        if descendants.issubset(identifiers):
-            break
-        identifiers.update(descendants)
+    identifiers = _windows_editor_process_ids(directory, launcher_pid, processes)
     handles = []
     try:
         for identifier in identifiers:
@@ -129,7 +149,13 @@ def check(package, manifest=None, plugin_version=None, form_handoff=False):
                     raise
                 finally:
                     if sys.platform == "win32":
-                        stop_windows_editor(editor.parent)
+                        try:
+                            stop_windows_editor(editor.parent, child.pid)
+                        except Exception:
+                            log.flush()
+                            print("Failed to stop the test-owned editor process tree.", file=sys.stderr)
+                            print(log_path.read_bytes()[-8000:].decode("utf-8", "replace"), file=sys.stderr)
+                            raise
                     else:
                         try:
                             os.killpg(child.pid, signal.SIGTERM)
