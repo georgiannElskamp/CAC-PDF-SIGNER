@@ -38,6 +38,8 @@ def claim(state, key, limit=1):
         return False
     record["claims"][key] = count + 1
     record["deadline"] = cycle["end"].isoformat()
+    if os.environ.get("GITHUB_RUN_ID", "").isdigit():
+        record.setdefault("runs", {})[key] = os.environ["GITHUB_RUN_ID"]
     state.save()
     return True
 

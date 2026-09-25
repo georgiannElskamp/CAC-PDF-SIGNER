@@ -37,6 +37,13 @@ def stale(value, hours):
     return not value or datetime.fromisoformat(value.replace("Z", "+00:00")) < datetime.now(timezone.utc) - timedelta(hours=hours)
 
 
+def report_stale(value):
+    cycle = window()
+    if cycle["day"]:
+        return not value or datetime.fromisoformat(value.replace("Z", "+00:00")) < cycle["start"]
+    return stale(value, 35 * 24)
+
+
 def load_state():
     try:
         item = api(f"/repos/{PRIVATE}/contents/state.json?ref=state")
@@ -182,10 +189,10 @@ def health():
             if error.code != 404:
                 raise
             pipeline = {}
-        if stale(pipeline.get("lastSuccessfulPoll"), 35 * 24):
-            problems.append("Research controller has no successful reconciliation in 35 days.")
-    if stale(state.get("lastSuccessfulPoll"), 35 * 24):
-        problems.append("No successful monthly discovery in 35 days. Check App credentials and the discovery workflow.")
+        if report_stale(pipeline.get("lastSuccessfulPoll")):
+            problems.append("Research controller has no successful reconciliation for the expected maintenance cycle.")
+    if report_stale(state.get("lastSuccessfulPoll")):
+        problems.append("No successful discovery for the expected maintenance cycle. Check App credentials and the discovery workflow.")
     for key, record in state["records"].items():
         if record["status"] != "completed":
             problems.append(f"{record['tag']}: dispatch {key[:12]} has no completed result. Inspect before manually retrying.")
@@ -195,10 +202,19 @@ def health():
         problems.append(item["tag"] + ": " + item["reason"])
     if state.get("lastComponentDispatch"):
         runs = api(f"/repos/{PUBLIC}/actions/workflows/component-watch.yml/runs?per_page=1", anonymous=True)["workflow_runs"]
-        if not runs or stale(runs[0]["created_at"], 35 * 24) or runs[0]["conclusion"] != "success":
+        if (not runs or runs[0]["created_at"] < state["lastComponentDispatch"][:19] or report_stale(runs[0]["created_at"])
+                or runs[0]["conclusion"] != "success"):
             problems.append("The monthly component watch is missing, stale, pending or unsuccessful.")
-    discovery = api(f"/repos/{PRIVATE}/actions/workflows/discovery.yml/runs?branch=main&per_page=1")["workflow_runs"]
-    if not discovery or stale(discovery[0]["created_at"], 35 * 24) or discovery[0]["conclusion"] != "success":
+    try:
+        item = api(f"/repos/{PRIVATE}/contents/monthly.json?ref=state")
+        monthly = json.loads(base64.b64decode(item["content"]))
+    except urllib.error.HTTPError as error:
+        if error.code != 404:
+            raise
+        monthly = {}
+    run_id = monthly.get("cycles", {}).get(window()["id"], {}).get("runs", {}).get("discovery")
+    discovery = api(f"/repos/{PRIVATE}/actions/runs/{run_id}") if run_id else None
+    if not discovery or discovery["conclusion"] != "success":
         problems.append("Monthly dependency/discovery workflow needs attention; dependency updates are not verified.")
     rows = []
     for repo in (PUBLIC, PRIVATE):
@@ -206,7 +222,12 @@ def health():
         if len(pulls) == 100:
             problems.append(repo + ": PR listing may be incomplete.")
         for pull in pulls:
-            rows.append(f"- [{repo} #{pull['number']}]({pull['html_url']}), target `{pull['base']['ref']}`, commit `{pull['head']['sha']}`.")
+            sha = pull["head"]["sha"]
+            status = api(f"/repos/{repo}/commits/{sha}/status")["state"]
+            checks = api(f"/repos/{repo}/commits/{sha}/check-runs?filter=latest&per_page=100")["check_runs"]
+            incomplete = sum(c["status"] != "completed" or c["conclusion"] not in {"success", "skipped", "neutral"} for c in checks)
+            rows.append(f"- [{repo} #{pull['number']}]({pull['html_url']}), target `{pull['base']['ref']}`, commit `{sha}`. "
+                        f"Commit status: {status}; {incomplete} unfinished/unsuccessful check(s).")
     title = "Monthly maintenance " + window()["id"]
     issues = api(f"/repos/{PRIVATE}/issues?state=all&per_page=100")
     issue = next((item for item in issues if item["title"] == title and not item.get("pull_request")

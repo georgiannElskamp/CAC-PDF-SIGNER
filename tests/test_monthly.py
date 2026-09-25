@@ -13,6 +13,7 @@ import dependencies
 import maintenance
 import pipeline
 import pipeline_policy as policy
+from test_scheduler import scheduler
 from test_pipeline import SHA, MAIN, STAMP, pull
 
 
@@ -54,6 +55,37 @@ class MonthlyCalendarTests(unittest.TestCase):
         self.assertEqual(state.save.call_count, 3)
         with patch.object(maintenance, "clock", return_value=self.local("2026-09-30T21:01:00")):
             self.assertFalse(maintenance.claim(state, "unused"))
+
+    def test_closing_report_does_not_reuse_last_months_success(self):
+        with patch.object(maintenance, "clock", return_value=self.local("2026-09-30T21:07:00")):
+            self.assertTrue(scheduler.report_stale("2026-08-30T22:00:00Z"))
+            self.assertTrue(scheduler.report_stale("2026-09-29T22:00:00Z"))
+            self.assertFalse(scheduler.report_stale("2026-09-30T12:00:00Z"))
+
+    def test_report_uses_claimed_scan_not_a_later_noop_kickoff(self):
+        at = self.local("2026-09-30T21:07:00")
+        state = {"records": {}, "lastSuccessfulPoll": "2026-09-30T12:00:00Z"}
+        monthly = {"cycles": {"2026-09": {"runs": {"discovery": "42"}}}}
+        posted = []
+        def api(path, method="GET", body=None, **kwargs):
+            if "/contents/monthly.json" in path:
+                return {"content": base64.b64encode(json.dumps(monthly).encode()).decode()}
+            if path.endswith("/actions/runs/42"):
+                return {"conclusion": "failure"}
+            if "/pulls?" in path or "/issues?" in path:
+                return []
+            if method == "POST" and path.endswith("/issues"):
+                posted.append(body)
+                return {}
+            self.fail(path)
+        with patch.dict(os.environ, {"PIPELINE_ENABLED": "false"}), \
+             patch.object(maintenance, "clock", return_value=at), \
+             patch.object(scheduler, "load_state", return_value=(state, "state-sha")), \
+             patch.object(scheduler, "api", side_effect=api):
+            with self.assertRaises(SystemExit):
+                scheduler.health()
+        self.assertEqual(posted[0]["title"], "Monthly maintenance 2026-09")
+        self.assertIn("dependency updates are not verified", posted[0]["body"])
 
     def test_scheduled_pipeline_does_nothing_outside_window(self):
         with patch.dict(os.environ, {"GITHUB_REPOSITORY": dependencies.PRIVATE, "GITHUB_EVENT_NAME": "schedule"}), \

@@ -200,7 +200,15 @@ def publish(target, output, dry_run=False):
 
 
 def start(dry_run):
-    allowed = dry_run or os.environ.get("GITHUB_EVENT_NAME") != "schedule" or claim(State("monthly.json"), "discovery")
+    allowed = True
+    if not dry_run:
+        state = State("monthly.json")
+        if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
+            allowed = claim(state, "discovery")
+        else:
+            cycle = state.data.setdefault("cycles", {}).setdefault(window()["id"], {"claims": {}})
+            cycle.setdefault("runs", {})["discovery"] = os.environ["GITHUB_RUN_ID"]
+            state.save()
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
         output.write("run=" + str(allowed).lower() + "\n")
 
