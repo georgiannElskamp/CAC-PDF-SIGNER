@@ -71,6 +71,10 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(self.discover(releases, state), ["v10.0.0.1", "v9.6.0", "v9.5.0"])
         self.assertEqual(state["deferredEditors"], ["v9.4.0"])
 
+    def test_four_part_release_precedes_its_shorter_version_prefixes(self):
+        releases = [self.editor_release(v) for v in ("10.0", "10.0.0", "10.0.0.1")]
+        self.assertEqual(self.discover(releases, {"records": {}}), ["v10.0.0.1", "v10.0.0", "v10.0"])
+
     def test_controller_and_public_workflow_agree_on_fingerprint(self):
         release = test_automation.ReleaseDiscoveryTests().release()
         approved = {"sha256": "b" * 64}

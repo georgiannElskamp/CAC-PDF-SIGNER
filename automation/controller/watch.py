@@ -170,11 +170,11 @@ def watch(force=False):
         if record and (record["status"] != "completed" or not (force or monthly_control)):
             continue
         candidates[key] = {"key": key, "tag": tag, "record": record,
-                           "version": tuple(-n for n in map(int, editor["version"].split(".")))}
+                           "version": tuple(map(int, editor["version"].split(".")))}
     # New combinations first, newest version first. Rotate passing controls by
     # their last cycle so an unmerged pin proposal cannot starve newer releases.
-    ordered = sorted(candidates.values(), key=lambda item: (
-        item["record"] is not None, (item["record"] or {}).get("cycle", ""), item["version"]))
+    ordered = sorted(candidates.values(), key=lambda item: item["version"], reverse=True)
+    ordered.sort(key=lambda item: (item["record"] is not None, (item["record"] or {}).get("cycle", "")))
     state["deferredEditors"] = [item["tag"] for item in ordered[3:]]
     dispatched = 0
     for item in ordered[:3]:
