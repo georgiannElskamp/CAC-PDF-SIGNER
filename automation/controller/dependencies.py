@@ -142,35 +142,59 @@ def probe(target, output, executable):
     print(target + ": real Dependabot synthetic update validated")
 
 
+def controller_templates(files, source, destination):
+    mapped = {}
+    for path, value in files.items():
+        template = "automation/controller/" + path.removeprefix(".github/workflows/")
+        original, mode = destination(template)
+        if mode != "100644" or original != source(path)[0]:
+            raise ValueError("Deployed controller differs from its reviewed template: " + template)
+        mapped[template] = value
+    return mapped
+
+
 def publish(target, output, dry_run=False):
     if not dry_run and not scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME")):
         raise RuntimeError("Monthly publication deadline passed; proposals retained for review")
     repo, branch, _ = TARGETS[target]
-    credential = "GH_TOKEN" if target == "controller" or dry_run else "APP_TOKEN"
+    credential = "GH_TOKEN" if dry_run else "APP_TOKEN"
     def request(path, method="GET", body=None):
         return api(f"/repos/{repo}" + path, method, body, credential=credential)
+    def read_originals(source_repo, source_base, source_credential):
+        def read(path):
+            return api(f"/repos/{source_repo}" + path, credential=source_credential)
+        tree_sha = read("/git/commits/" + source_base)["tree"]["sha"]
+        tree = read("/git/trees/" + tree_sha + "?recursive=1")
+        if tree.get("truncated"):
+            raise ValueError("Incomplete dependency source tree")
+        entries = {item["path"]: item for item in tree["tree"] if item["type"] == "blob"}
+        def original(path):
+            item = entries.get(path)
+            if not item:
+                raise ValueError("Dependency update adds a file")
+            blob = read("/git/blobs/" + item["sha"])
+            return base64.b64decode(blob["content"]).decode("utf-8"), item["mode"]
+        return tree_sha, original
     meta = json.loads((output / "metadata.json").read_text())
     base = meta["base"]
     if meta["target"] != target or not re.fullmatch(r"[a-f0-9]{40}", base):
         raise ValueError("Invalid dependency result identity")
-    if request(f"/git/ref/heads/{branch}")["object"]["sha"] != base:
+    source_credential = "GH_TOKEN" if target == "controller" else credential
+    if api(f"/repos/{repo}/git/ref/heads/{branch}", credential=source_credential)["object"]["sha"] != base:
         raise ValueError("Base advanced; retain the proposal for next month's scan or manually rerun")
-    tree_sha = request("/git/commits/" + base)["tree"]["sha"]
-    tree = request("/git/trees/" + tree_sha + "?recursive=1")
-    if tree.get("truncated"):
-        raise ValueError("Incomplete dependency source tree")
-    entries = {item["path"]: item for item in tree["tree"] if item["type"] == "blob"}
-    def original(path):
-        item = entries.get(path)
-        if not item:
-            raise ValueError("Dependency update adds a file")
-        blob = request("/git/blobs/" + item["sha"])
-        return base64.b64decode(blob["content"]).decode("utf-8"), item["mode"]
+    tree_sha, original = read_originals(repo, base, source_credential)
     values = proposals((output / "result.jsonl").read_text(encoding="utf-8"), target, base, original)
     if not values:
         print(target + ": no dependency changes")
         return
     files = values[0]
+    if target == "controller":
+        # Workflow-token permissions cannot modify workflow files. Propose the
+        # public source templates through the App; private deployment stays manual.
+        repo, branch = PUBLIC, "research"
+        base = request(f"/git/ref/heads/{branch}")["object"]["sha"]
+        tree_sha, destination = read_originals(repo, base, credential)
+        files = controller_templates(files, original, destination)
     print(f"{target}: validated {len(files)} pin file(s)")
     if dry_run:
         return

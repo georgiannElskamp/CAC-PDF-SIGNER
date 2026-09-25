@@ -33,7 +33,7 @@ Reviewed source templates live in `automation/controller/` in the public reposit
 
 ## Dependency jobs and cutover
 
-The discovery workflow runs Dependabot in separate read-only jobs, then validates pin-only output before creating public or private PRs. No App key or write token reaches the updater containers. Public PRs use the maintenance App; private PRs use the repository workflow token and need the repository setting that allows Actions to create PRs. No step approves or merges private PRs.
+The discovery workflow runs Dependabot in separate read-only jobs, then validates pin-only output before creating public research PRs through the maintenance App. No App key or write token reaches the updater containers. Private workflow updates target their identical public source templates; deployment remains a separate maintainer step. Template drift blocks publication. The App stays installed only on the public repository, and Actions does not need permission to create private PRs.
 
 1. Run discovery on the implementation branch with `dry_run=true`; inspect all three ecosystems and proposal validation.
 2. Review the public policy/tests and deploy the matching controller source explicitly. Do not deploy arbitrary public PR content automatically.

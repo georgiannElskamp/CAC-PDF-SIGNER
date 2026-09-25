@@ -208,6 +208,53 @@ class DependencyProposalTests(unittest.TestCase):
                     dependencies.publish("python", root)
                 self.assertEqual(changed.call_count, 1)
 
+    def test_controller_updates_only_identical_public_templates(self):
+        before = "steps:\n  - uses: actions/checkout@" + SHA + " # v1\n"
+        after = before.replace(SHA, MAIN).replace("# v1", "# v2")
+        path = ".github/workflows/discovery.yml"
+        template = "automation/controller/discovery.yml"
+        calls = []
+        def api(endpoint, method="GET", body=None, credential=None):
+            private = endpoint.startswith("/repos/" + dependencies.PRIVATE + "/")
+            if private:
+                self.assertEqual(method, "GET")
+                self.assertEqual(credential, "GH_TOKEN")
+            else:
+                self.assertEqual(credential, "APP_TOKEN")
+            calls.append((endpoint, method, body))
+            if "/git/ref/heads/" in endpoint:
+                return {"object": {"sha": SHA if private else MAIN}}
+            if method == "GET" and "/git/commits/" in endpoint:
+                return {"tree": {"sha": "tree"}}
+            if method == "GET" and "/git/trees/" in endpoint:
+                return {"tree": [{"type": "blob", "path": path if private else template,
+                                  "mode": "100644", "sha": "blob"}]}
+            if "/git/blobs/" in endpoint:
+                return {"content": base64.b64encode(before.encode()).decode()}
+            if endpoint.endswith("/pulls"):
+                return {"html_url": "https://github.com/" + dependencies.PUBLIC + "/pull/1"}
+            return {"sha": "created"}
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            (root / "metadata.json").write_text(json.dumps({"target": "controller", "base": SHA}))
+            (root / "result.jsonl").write_text(self.output(path, after))
+            with patch.object(dependencies, "api", side_effect=api), \
+                 patch.object(dependencies, "pages", return_value=[]), \
+                 patch.object(dependencies, "optional", return_value=None):
+                dependencies.publish("controller", root)
+        tree = next(body for endpoint, method, body in calls if endpoint.endswith("/git/trees") and method == "POST")
+        self.assertEqual(tree["tree"][0]["path"], template)
+        self.assertEqual(tree["tree"][0]["content"], after)
+        pr = next(body for endpoint, method, body in calls if endpoint.endswith("/pulls") and method == "POST")
+        self.assertEqual(pr["base"], "research")
+
+    def test_controller_template_drift_and_symlinks_block_proposals(self):
+        source = lambda p: ("original", "100644")
+        files = {".github/workflows/discovery.yml": "new"}
+        for value, mode in (("changed", "100644"), ("original", "120000")):
+            with self.assertRaisesRegex(ValueError, "differs from its reviewed template"):
+                dependencies.controller_templates(files, source, lambda p: (value, mode))
+
 
 class ExistingReviewTests(unittest.TestCase):
     def evidence(self):
