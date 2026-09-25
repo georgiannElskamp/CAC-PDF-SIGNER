@@ -16,13 +16,31 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from automation import download, validate_manifest
 
 
-def _windows_editor_process_ids(directory, launcher_pid, processes):
+def _windows_process_times(handle):
+    import ctypes
+    from ctypes import wintypes
+
+    kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+    get_times = kernel.GetProcessTimes
+    get_times.argtypes = [wintypes.HANDLE] + [ctypes.POINTER(wintypes.FILETIME)] * 4
+    get_times.restype = wintypes.BOOL
+    values = [wintypes.FILETIME() for _ in range(4)]
+    if not get_times(handle, *(ctypes.byref(value) for value in values)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    # CIM creation dates have microsecond precision.
+    return tuple(((value.dwHighDateTime << 32) | value.dwLowDateTime) // 10 for value in values[:2])
+
+
+def _windows_editor_process_ids(directory, launcher_pid, processes, launcher_times):
     """Return the live launcher and descendants owned by this test session."""
     root = Path(directory).resolve(strict=True)
     by_identifier = {int(process["ProcessId"]): process for process in processes}
     launcher = by_identifier.get(launcher_pid)
+    created, exited = launcher_times
     targets = set()
     if launcher is not None:
+        if launcher.get("Created") != created:
+            return targets
         path = launcher.get("ExecutablePath")
         if not path:
             return targets
@@ -35,16 +53,19 @@ def _windows_editor_process_ids(directory, launcher_pid, processes):
         if root not in executable.parents:
             return targets
         targets.add(launcher_pid)
+    elif not exited:
+        return targets
 
-    # Keep an exited launcher as an ancestry marker: Windows retains its PID
-    # as ParentProcessId on the detached editor processes it created.
-    ancestry = {launcher_pid}
+    # A detached child must have started during the retained launcher's lifetime.
+    ancestry = {launcher_pid: launcher_times}
     while True:
-        descendants = {
-            identifier for identifier, process in by_identifier.items()
-            if int(process["ParentProcessId"]) in ancestry
-        }
-        new = descendants - ancestry
+        new = {}
+        for identifier, process in by_identifier.items():
+            parent = ancestry.get(int(process["ParentProcessId"]))
+            started = process.get("Created")
+            if (identifier not in ancestry and parent and started is not None
+                    and started >= parent[0] and (not parent[1] or started <= parent[1])):
+                new[identifier] = (started, 0)
         if not new:
             break
         ancestry.update(new)
@@ -52,7 +73,7 @@ def _windows_editor_process_ids(directory, launcher_pid, processes):
     return targets
 
 
-def stop_windows_editor(directory, launcher_pid):
+def stop_windows_editor(directory, launcher):
     import _winapi
 
     # The launcher can exit before its editor and helper processes.
@@ -60,18 +81,31 @@ def stop_windows_editor(directory, launcher_pid):
     inventory = subprocess.run(powershell + [
         "[Console]::OutputEncoding=[Text.UTF8Encoding]::new(); "
         "ConvertTo-Json -Compress -InputObject @(Get-CimInstance Win32_Process | "
-        "Select-Object ProcessId,ParentProcessId,ExecutablePath)"
+        "Select-Object ProcessId,ParentProcessId,ExecutablePath,"
+        "@{Name='Created';Expression={if ($_.CreationDate) {($_.CreationDate.ToFileTimeUtc()).ToString()}}})"
     ], check=True, timeout=30, capture_output=True, encoding="utf-8")
     processes = json.loads(inventory.stdout)
-    identifiers = _windows_editor_process_ids(directory, launcher_pid, processes)
+    for process in processes:
+        process["Created"] = int(process["Created"]) // 10 if process.get("Created") else None
+    identifiers = _windows_editor_process_ids(directory, launcher.pid, processes, _windows_process_times(launcher._handle))
+    expected = {int(process["ProcessId"]): process["Created"] for process in processes}
     handles = []
     try:
         for identifier in identifiers:
             try:
-                handles.append(_winapi.OpenProcess(0x100001, False, identifier))  # SYNCHRONIZE | PROCESS_TERMINATE
+                handle = _winapi.OpenProcess(0x101001, False, identifier)  # SYNCHRONIZE | QUERY_LIMITED_INFORMATION | TERMINATE
             except OSError as error:
                 if error.winerror != 87:  # Process already exited.
                     raise
+                continue
+            try:
+                if _windows_process_times(handle)[0] != expected[identifier]:
+                    continue
+                handles.append(handle)
+                handle = None
+            finally:
+                if handle is not None:
+                    _winapi.CloseHandle(handle)
         for handle in handles:
             if _winapi.WaitForSingleObject(handle, 0) != _winapi.WAIT_OBJECT_0:
                 try:
@@ -150,7 +184,7 @@ def check(package, manifest=None, plugin_version=None, form_handoff=False):
                 finally:
                     if sys.platform == "win32":
                         try:
-                            stop_windows_editor(editor.parent, child.pid)
+                            stop_windows_editor(editor.parent, child)
                         except Exception:
                             log.flush()
                             print("Failed to stop the test-owned editor process tree.", file=sys.stderr)

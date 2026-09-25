@@ -10,6 +10,6 @@
   },
   "buildTools": {
     "gcc": "8.3.0",
-    "pyinstaller": "6.22.3"
+    "requirements": "requirements-native-build.txt"
   }
 }

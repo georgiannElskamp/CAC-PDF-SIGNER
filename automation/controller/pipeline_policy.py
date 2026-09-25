@@ -21,7 +21,12 @@ def eligible(pull):
 
 def pin_only(before, after):
     pattern = r"(?m)(\buses:\s+[A-Za-z0-9_./-]+)@[a-f0-9]{40}(?:[ \t]+#[^\n]*)?"
-    return before != after and re.sub(pattern, r"\1@PIN", before) == re.sub(pattern, r"\1@PIN", after)
+    if before == after or re.sub(pattern, r"\1@PIN", before) != re.sub(pattern, r"\1@PIN", after):
+        return False
+    for old, new in zip(before.splitlines(), after.splitlines()):
+        if old != new and not re.search(r"\buses:\s+[A-Za-z0-9_./-]+@[a-f0-9]{40}(?:[ \t]+# ?v?\d{1,4}(?:\.\d{1,4}){0,3})?[ \t]*$", new):
+            return False
+    return True
 
 
 def sensitive(files):
@@ -45,11 +50,29 @@ def candidate_run(run, sha, branch):
             and run["status"] == "completed" and run["conclusion"] == "success")
 
 
-def review_result(sha, request, comments, reviews, inline, reactions):
+def automatic_review(sha, comments, reviews, inline):
+    """Accept completed connector reviews only with an exact API commit binding."""
+    current = [r for r in reviews if r["user"]["login"] == CODEX and r.get("commit_id") == sha
+               and r.get("submitted_at") and r.get("state") != "DISMISSED"]
+    if not current:
+        return None
+    since = min(r["submitted_at"] for r in current)
+    ids = {r["id"] for r in current}
+    if (any(c["user"]["login"] == CODEX and c.get("original_commit_id") == sha
+            and c.get("pull_request_review_id") in ids for c in inline)
+            or any(r.get("state") == "CHANGES_REQUESTED" or re.search(r"\[P[0-3]\]", r.get("body") or "") for r in current)):
+        return "findings", since
+    result = review_result(sha, {"created_at": since}, comments, reviews, inline, [], automatic=True)
+    return result, since
+
+
+def review_result(sha, request, comments, reviews, inline, reactions, *, automatic=False):
     since = request["created_at"]
     def fresh(item):
         return item["user"]["login"] == CODEX and (item.get("submitted_at") or item.get("created_at") or "") >= since
     current = {r["id"]: r for r in reviews if fresh(r) and r["commit_id"] == sha}
+    if automatic and not current:
+        return "pending"
     findings = [c for c in inline if fresh(c) and c.get("original_commit_id") == sha
                 and c.get("pull_request_review_id") in current]
     if findings or any(r.get("state") == "CHANGES_REQUESTED" or re.search(r"\[P[0-3]\]", r.get("body", "")) for r in current.values()):
@@ -63,8 +86,11 @@ def review_result(sha, request, comments, reviews, inline, reactions):
             continue
         for line in body.splitlines():
             stamps = re.findall(r'datetime="([^"]+)"', line)
+            native_trigger = automatic and any(t in line for t in ("PR opened", "Ready for review", "New commits"))
+            # Native summaries can date the trigger, before the API review was
+            # submitted. The exact commit and updated summary bind completion.
             if ("Code Review" in line and "Completed" in line and f"`{sha[:7]}`" in line
-                    and "Manual request" in line and any(s[:19] >= since[:19] for s in stamps)):
+                    and (native_trigger or ("Manual request" in line and any(s[:19] >= since[:19] for s in stamps)))):
                 completed = True
     clean = any(fresh(c) and "Codex Review: Didn't find any major issues." in (c.get("body") or "")
                 and re.search(r"\*\*Reviewed commit:\*\* `" + sha[:10] + r"[a-f0-9]*`", c["body"])

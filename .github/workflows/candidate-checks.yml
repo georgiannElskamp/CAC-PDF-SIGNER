@@ -61,5 +61,5 @@ jobs:
             ${{ runner.temp }}/report/signed-preview.png
             ${{ runner.temp }}/report/field-screen.png
             ${{ runner.temp }}/report/ui-failure.png
-          retention-days: 14
+          retention-days: 90
           if-no-files-found: error

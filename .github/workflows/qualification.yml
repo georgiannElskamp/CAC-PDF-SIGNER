@@ -45,7 +45,7 @@ jobs:
         with:
           name: qualification-core
           path: ${{ env.PROBE_REPORT }}
-          retention-days: 30
+          retention-days: 90
           if-no-files-found: error
       - name: Preserve any failed probe outcome
         if: always()
@@ -102,7 +102,7 @@ jobs:
         with:
           name: qualification-windows-cng
           path: ${{ env.PROBE_REPORT }}
-          retention-days: 30
+          retention-days: 90
           if-no-files-found: error
   desktop:
     strategy:
@@ -140,7 +140,7 @@ jobs:
         with:
           name: qualification-desktop-${{ matrix.os }}
           path: ${{ env.PROBE_REPORT }}
-          retention-days: 30
+          retention-days: 90
           if-no-files-found: error
   virtual:
     runs-on: ubuntu-24.04
@@ -174,7 +174,7 @@ jobs:
         with:
           name: qualification-virtual
           path: ${{ env.PROBE_REPORT }}
-          retention-days: 30
+          retention-days: 90
           if-no-files-found: error
   evidence:
     if: always()
@@ -205,7 +205,7 @@ jobs:
         with:
           name: qualification-evidence
           path: ${{ runner.temp }}/qualification-evidence.json
-          retention-days: 30
+          retention-days: 90
           if-no-files-found: error
       - name: Require every qualification lane
         env:
