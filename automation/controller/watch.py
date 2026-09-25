@@ -10,7 +10,7 @@ import re
 import urllib.error
 import urllib.request
 from release_manifest import resolve as resolve_plugin
-from maintenance import window, scheduled_allowed
+from maintenance import window, scheduled_allowed, require_window
 
 PUBLIC = "georgiannElskamp/CAC-PDF-SIGNER"
 UPSTREAM = "ONLYOFFICE/DesktopEditors"
@@ -18,7 +18,14 @@ PRIVATE = os.environ.get("GITHUB_REPOSITORY", "")
 ASSETS = {"windows": "DesktopEditors_x64.exe", "linux": "onlyoffice-desktopeditors_amd64.deb"}
 
 
-def api(path, method="GET", body=None, dispatch=False, anonymous=False):
+def api(path, method="GET", body=None, dispatch=False, anonymous=False, closing=False):
+    if method not in {"GET", "HEAD"}:
+        if closing:
+            if (method not in {"POST", "PATCH"} or not re.fullmatch(r"/repos/" + re.escape(PRIVATE) + r"/issues(?:/[0-9]+)?", path)
+                    or not scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME"), closing=True)):
+                raise ValueError("Closing report can only update its private issue on maintenance day")
+        else:
+            require_window()
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
     if not anonymous:
         headers["Authorization"] = "Bearer " + os.environ["DISPATCH_TOKEN" if dispatch else "GH_TOKEN"]
@@ -42,6 +49,15 @@ def report_stale(value):
     if cycle["day"]:
         return not value or datetime.fromisoformat(value.replace("Z", "+00:00")) < cycle["start"]
     return stale(value, 35 * 24)
+
+
+def full_reconciliation_current(pipeline):
+    complete = pipeline.get("fullReconciliation", {})
+    run_id = str(complete.get("runId") or "")
+    if report_stale(complete.get("completedAt")) or not run_id.isdigit():
+        return False
+    run = api(f"/repos/{PRIVATE}/actions/runs/{run_id}")
+    return run.get("conclusion") == "success"
 
 
 def load_state():
@@ -189,7 +205,7 @@ def health():
             if error.code != 404:
                 raise
             pipeline = {}
-        if report_stale(pipeline.get("lastSuccessfulPoll")):
+        if not full_reconciliation_current(pipeline):
             problems.append("Research controller has no successful reconciliation for the expected maintenance cycle.")
     if report_stale(state.get("lastSuccessfulPoll")):
         problems.append("No successful discovery for the expected maintenance cycle. Check App credentials and the discovery workflow.")
@@ -242,9 +258,9 @@ def health():
     values = {"title": title, "body": body, "state": "open"}
     if issue:
         if issue["body"] != body or issue["state"] != values["state"]:
-            api(f"/repos/{PRIVATE}/issues/{issue['number']}", "PATCH", values)
+            api(f"/repos/{PRIVATE}/issues/{issue['number']}", "PATCH", values, closing=True)
     else:
-        api(f"/repos/{PRIVATE}/issues", "POST", {"title": title, "body": body})
+        api(f"/repos/{PRIVATE}/issues", "POST", {"title": title, "body": body}, closing=True)
     print(body)
     if problems:
         raise SystemExit(1)

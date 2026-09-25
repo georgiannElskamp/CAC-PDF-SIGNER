@@ -491,7 +491,12 @@ def main():
     if api("/user", credential="CODEX_TRIGGER_TOKEN")["login"] != OWNER:
         raise SystemExit("Codex trigger identity changed")
     state = State()
-    if not args.pull and not args.pr_only:
+    full_pass = not args.pull and not args.pr_only
+    if full_pass and not args.dry_run:
+        state.data["fullReconciliation"] = {"runId": os.environ.get("GITHUB_RUN_ID"),
+                                            "cycle": maintenance.window()["id"]}
+        state.save()
+    if full_pass:
         for pull in pages(REPO + "/pulls?state=open&base=main"):
             if pull["user"]["login"] == "dependabot[bot]" and pull["head"]["repo"]["full_name"] == PUBLIC:
                 if not args.dry_run:
@@ -499,17 +504,20 @@ def main():
                 print(f"Dependency PR #{pull['number']} routed to research", flush=True)
     pulls = [api(REPO + f"/pulls/{args.pull}")] if args.pull else pages(REPO + "/pulls?state=open&base=research")
     for pull in pulls:
-        if not maintenance.scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME")):
-            break
+        maintenance.require_window()
         if not eligible(pull):
             continue
         if not args.pull:
             pull = api(REPO + f"/pulls/{pull['number']}")
         reconcile_pull(state, pull, args.dry_run)
-    if not args.pull and not args.pr_only and maintenance.scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME")):
+    maintenance.require_window()
+    if full_pass:
         promote(state, args.release_type, args.dry_run)
     if not args.dry_run:
+        maintenance.require_window()
         state.data["lastSuccessfulPoll"] = now()
+        if full_pass:
+            state.data["fullReconciliation"]["completedAt"] = now()
         state.save()
 
 

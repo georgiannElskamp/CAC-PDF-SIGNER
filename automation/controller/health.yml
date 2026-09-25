@@ -9,6 +9,10 @@ on:
 permissions:
   contents: read
   issues: write
+  actions: read
+  pull-requests: read
+  statuses: read
+  checks: read
 jobs:
   health:
     if: github.ref == 'refs/heads/main' && (vars.AUTOMATION_ENABLED == 'true' || vars.PIPELINE_ENABLED == 'true')

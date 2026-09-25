@@ -7,6 +7,10 @@ from zoneinfo import ZoneInfo
 ZONE = ZoneInfo("America/Chicago")
 
 
+class DeadlinePassed(Exception):
+    """Stop without treating an expired window as a rejected PR repair."""
+
+
 def clock():
     return datetime.now(timezone.utc)
 
@@ -25,6 +29,11 @@ def scheduled_allowed(event, at=None, closing=False):
         return True
     value = window(at)
     return value["day"] if closing else value["active"]
+
+
+def require_window():
+    if not scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME")):
+        raise DeadlinePassed("Monthly maintenance deadline passed; no further writes")
 
 
 def claim(state, key, limit=1):

@@ -4,6 +4,7 @@ import json
 import os
 import urllib.error
 import urllib.request
+from maintenance import require_window
 
 OWNER = "georgiannElskamp"
 PUBLIC = OWNER + "/CAC-PDF-SIGNER"
@@ -11,6 +12,8 @@ PRIVATE = OWNER + "/cac-pdf-signer-automation"
 
 
 def api(path, method="GET", body=None, credential="APP_TOKEN"):
+    if method not in {"GET", "HEAD"}:
+        require_window()
     token = os.environ[credential]
     request = urllib.request.Request("https://api.github.com" + path, method=method,
         data=None if body is None else json.dumps(body).encode(), headers={

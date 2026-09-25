@@ -12,6 +12,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "automation/control
 import dependencies
 import maintenance
 import pipeline
+import github_api
 import pipeline_policy as policy
 from test_scheduler import scheduler
 from test_pipeline import SHA, MAIN, STAMP, pull
@@ -107,14 +108,97 @@ class MonthlyCalendarTests(unittest.TestCase):
         api.assert_not_called()
 
     def test_event_pass_cannot_start_release_promotion_or_dependency_retargeting(self):
+        state = Mock(data={"pulls": {}, "fullReconciliation": {"runId": "old"}})
         with patch.dict(os.environ, {"GITHUB_REPOSITORY": dependencies.PRIVATE, "GITHUB_EVENT_NAME": "workflow_dispatch"}), \
              patch.object(sys, "argv", ["pipeline.py", "--pr-only"]), \
-             patch.object(pipeline, "State", return_value=Mock(data={"pulls": {}})), \
+             patch.object(pipeline, "State", return_value=state), \
              patch.object(pipeline, "api", return_value={"login": policy.OWNER}), \
              patch.object(pipeline, "pages", return_value=[]) as pages, patch.object(pipeline, "promote") as promote:
             pipeline.main()
         promote.assert_not_called()
+        self.assertEqual(state.data["fullReconciliation"], {"runId": "old"})
         self.assertTrue(all("base=research" in c.args[0] for c in pages.call_args_list))
+
+    def test_expired_writes_stop_at_the_shared_api_boundary(self):
+        at = self.local("2026-09-30T21:01:00")
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "schedule"}), \
+             patch.object(maintenance, "clock", return_value=at), \
+             patch.object(github_api.urllib.request, "urlopen") as network:
+            for method in ("POST", "PUT", "PATCH", "DELETE"):
+                with self.assertRaises(maintenance.DeadlinePassed):
+                    github_api.api("/repos/example/repo/issues", method, {})
+                with self.assertRaises(maintenance.DeadlinePassed):
+                    scheduler.api("/repos/example/repo/issues", method, {})
+        network.assert_not_called()
+
+    def test_only_the_closing_report_can_write_after_deadline(self):
+        response = Mock()
+        response.__enter__ = Mock(return_value=Mock(read=Mock(return_value=b"{}")))
+        response.__exit__ = Mock(return_value=False)
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "schedule", "GH_TOKEN": "synthetic-test-token"}), \
+             patch.object(scheduler, "PRIVATE", dependencies.PRIVATE), \
+             patch.object(maintenance, "clock", return_value=self.local("2026-09-30T21:07:00")), \
+             patch.object(scheduler.urllib.request, "urlopen", return_value=response) as network:
+            scheduler.api("/repos/" + dependencies.PRIVATE + "/issues", "POST", {}, closing=True)
+            with self.assertRaises(ValueError):
+                scheduler.api("/repos/" + dependencies.PRIVATE + "/git/refs", "POST", {}, closing=True)
+            with self.assertRaises(ValueError):
+                scheduler.api("/repos/" + dependencies.PUBLIC + "/issues", "POST", {}, closing=True)
+        self.assertEqual(network.call_count, 1)
+
+    def test_deadline_crossed_while_reading_ci_cannot_post_a_status_or_repair(self):
+        clock = Mock(return_value=self.local("2026-09-30T20:59:00"))
+        def ci(value):
+            clock.return_value = self.local("2026-09-30T21:01:00")
+            return "pending", []
+        state = Mock(data={"pulls": {}})
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "schedule"}), \
+             patch.object(maintenance, "clock", clock), patch.object(pipeline, "policy_changes", return_value=[]), \
+             patch.object(pipeline, "ci_state", side_effect=ci), \
+             patch.object(github_api.urllib.request, "urlopen") as network:
+            with self.assertRaises(maintenance.DeadlinePassed):
+                pipeline.reconcile_pull(state, pull())
+        network.assert_not_called()
+        state.save.assert_not_called()
+
+    def test_full_pass_is_recorded_only_after_reconciliation_and_promotion_finish(self):
+        for failure in (None, RuntimeError("incomplete"), maintenance.DeadlinePassed("deadline")):
+            state = Mock(data={"pulls": {}})
+            with patch.dict(os.environ, {"GITHUB_REPOSITORY": dependencies.PRIVATE, "GITHUB_EVENT_NAME": "workflow_dispatch", "GITHUB_RUN_ID": "42"}), \
+                 patch.object(sys, "argv", ["pipeline.py"]), patch.object(pipeline, "State", return_value=state), \
+                 patch.object(pipeline, "api", return_value={"login": policy.OWNER}), \
+                 patch.object(pipeline, "pages", return_value=[]), patch.object(pipeline, "promote", side_effect=failure):
+                if failure:
+                    with self.assertRaises(type(failure)):
+                        pipeline.main()
+                else:
+                    pipeline.main()
+            self.assertEqual(state.data["fullReconciliation"]["runId"], "42")
+            self.assertEqual("completedAt" in state.data["fullReconciliation"], failure is None)
+
+    def test_report_rejects_pr_only_incomplete_or_unsuccessful_full_passes(self):
+        stamp = "2026-09-30T12:00:00Z"
+        with patch.object(maintenance, "clock", return_value=self.local("2026-09-30T21:07:00")), \
+             patch.object(scheduler, "api", return_value={"conclusion": "success"}) as api:
+            self.assertFalse(scheduler.full_reconciliation_current({"lastSuccessfulPoll": stamp}))
+            self.assertFalse(scheduler.full_reconciliation_current({"fullReconciliation": {"runId": "42"}}))
+            api.assert_not_called()
+            value = {"fullReconciliation": {"runId": "42", "completedAt": stamp}}
+            self.assertTrue(scheduler.full_reconciliation_current(value))
+            api.return_value = {"conclusion": "failure"}
+            self.assertFalse(scheduler.full_reconciliation_current(value))
+
+    def test_report_read_scopes_and_branch_dry_run_permissions(self):
+        root = Path(__file__).resolve().parents[1] / "automation/controller"
+        health = (root / "health.yml").read_text().split("permissions:\n", 1)[1].split("jobs:\n", 1)[0]
+        for permission in ("contents", "actions", "pull-requests", "statuses", "checks"):
+            self.assertIn("  " + permission + ": read\n", health)
+        discovery = (root / "discovery.yml").read_text()
+        gate = discovery.split("  gate:\n", 1)[1].split("  claim:\n", 1)[0]
+        claim = discovery.split("  claim:\n", 1)[1].split("  scan:\n", 1)[0]
+        self.assertNotIn(": write", gate)
+        self.assertIn("github.ref == 'refs/heads/main'", claim)
+        self.assertIn("inputs.dry_run != true", claim)
 
 
 class DependencyProposalTests(unittest.TestCase):

@@ -25,6 +25,19 @@ jobs:
     if: vars.AUTOMATION_ENABLED == 'true' && (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.dry_run))
     runs-on: ubuntu-24.04
     timeout-minutes: 5
+    outputs:
+      allowed: ${{ steps.calendar.outputs.allowed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: calendar
+        run: python3 -B maintenance.py
+  claim:
+    needs: gate
+    if: github.ref == 'refs/heads/main' && needs.gate.outputs.allowed == 'true' && inputs.dry_run != true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     permissions:
       contents: write
     outputs:
@@ -33,20 +46,13 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - id: calendar
-        run: python3 -B maintenance.py
       - id: claim
-        if: steps.calendar.outputs.allowed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-          DRY_RUN: ${{ inputs.dry_run }}
-        run: |
-          args=()
-          if [[ "$DRY_RUN" == true ]]; then args+=(--dry-run); fi
-          python3 -B dependencies.py start "${args[@]}"
+        run: python3 -B dependencies.py start
   scan:
-    needs: gate
-    if: needs.gate.outputs.run == 'true'
+    needs: [gate, claim]
+    if: always() && needs.gate.result == 'success' && needs.gate.outputs.allowed == 'true' && (inputs.dry_run == true || needs.claim.outputs.run == 'true')
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
@@ -119,8 +125,8 @@ jobs:
             python3 -B dependencies.py publish --target "$target" --output "$RUNNER_TEMP/proposals/dependency-$target" "${args[@]}"
           done
   editors:
-    needs: gate
-    if: needs.gate.outputs.run == 'true' && inputs.dry_run != true
+    needs: claim
+    if: needs.claim.outputs.run == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
