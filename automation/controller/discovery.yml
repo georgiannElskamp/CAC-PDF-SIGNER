@@ -52,7 +52,7 @@ jobs:
         run: python3 -B dependencies.py start
   scan:
     needs: [gate, claim]
-    if: always() && needs.gate.result == 'success' && needs.gate.outputs.allowed == 'true' && (inputs.dry_run == true || needs.claim.outputs.run == 'true')
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.gate.outputs.allowed == 'true' && (inputs.dry_run == true || needs.claim.outputs.run == 'true') }}
     runs-on: ubuntu-24.04
     timeout-minutes: 40
     strategy:
@@ -90,7 +90,7 @@ jobs:
           if-no-files-found: error
   publish:
     needs: scan
-    if: always() && needs.scan.result == 'success'
+    if: ${{ !cancelled() && needs.scan.result == 'success' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:

@@ -65,7 +65,7 @@ class MonthlyCalendarTests(unittest.TestCase):
 
     def test_report_uses_claimed_scan_not_a_later_noop_kickoff(self):
         at = self.local("2026-09-30T21:07:00")
-        state = {"records": {}, "lastSuccessfulPoll": "2026-09-30T12:00:00Z"}
+        state = {"records": {}, "lastSuccessfulPoll": "2026-09-30T12:00:00Z", "deferredEditors": ["v9.4.0"]}
         monthly = {"cycles": {"2026-09": {"runs": {"discovery": "42"}}}}
         posted = []
         def api(path, method="GET", body=None, **kwargs):
@@ -87,6 +87,7 @@ class MonthlyCalendarTests(unittest.TestCase):
                 scheduler.health()
         self.assertEqual(posted[0]["title"], "Monthly maintenance 2026-09")
         self.assertIn("dependency updates are not verified", posted[0]["body"])
+        self.assertIn("Editor combinations deferred by the three-dispatch limit: v9.4.0.", posted[0]["body"])
 
     def test_scheduled_pipeline_does_nothing_outside_window(self):
         with patch.dict(os.environ, {"GITHUB_REPOSITORY": dependencies.PRIVATE, "GITHUB_EVENT_NAME": "schedule"}), \
@@ -352,12 +353,14 @@ class DependencyProposalTests(unittest.TestCase):
 
 class ExistingReviewTests(unittest.TestCase):
     def evidence(self):
+        submitted, completed = "2026-01-01T00:05:00Z", "2026-01-01T00:05:01Z"
         review = {"id": 4, "user": {"login": policy.CODEX}, "commit_id": SHA,
-                  "submitted_at": STAMP, "state": "COMMENTED", "body": ""}
-        summary = {"user": {"login": policy.CODEX}, "created_at": STAMP, "updated_at": STAMP,
+                  "submitted_at": submitted, "state": "COMMENTED", "body": ""}
+        summary = {"user": {"login": policy.CODEX}, "created_at": STAMP, "updated_at": completed,
                    "body": '<!-- codex-pull-request-review-summary -->\nCode Review | Completed | `' + SHA[:7] +
                            '` | PR opened <relative-time datetime="' + STAMP + '">'}
-        clean = {**summary, "body": "Codex Review: Didn't find any major issues.\n**Reviewed commit:** `" + SHA[:10] + "`"}
+        clean = {**summary, "created_at": completed,
+                 "body": "Codex Review: Didn't find any major issues.\n**Reviewed commit:** `" + SHA[:10] + "`"}
         return [summary, clean], [review]
 
     def test_automatic_review_is_adopted_without_another_cloud_request(self):
@@ -367,6 +370,32 @@ class ExistingReviewTests(unittest.TestCase):
             self.assertEqual(pipeline.review(state, record, pull()), "clean")
         request.assert_not_called()
         self.assertTrue(record["review"]["automatic"])
+
+    def test_each_native_trigger_can_precede_its_completed_exact_commit_review(self):
+        for trigger in ("PR opened", "Ready for review", "New commits"):
+            comments, reviews = self.evidence()
+            comments[0]["body"] = comments[0]["body"].replace("PR opened", trigger)
+            result, since = policy.automatic_review(SHA, comments, reviews, [])
+            self.assertEqual(result, "clean")
+            self.assertEqual(since, reviews[0]["submitted_at"])
+
+    def test_automatic_completion_still_needs_current_completed_authentic_evidence(self):
+        for mutation in (lambda c: c[0].update(updated_at=STAMP),
+                         lambda c: c[0].update(body=c[0]["body"].replace("Completed", "Running")),
+                         lambda c: c[0].update(body=c[0]["body"].replace(SHA[:7], MAIN[:7])),
+                         lambda c: c[0].update(user={"login": "someone-else"}),
+                         lambda c: c[1].update(created_at=STAMP),
+                         lambda c: c[1].update(user={"login": "someone-else"})):
+            comments, reviews = self.evidence()
+            mutation(comments)
+            self.assertEqual(policy.automatic_review(SHA, comments, reviews, [])[0], "pending")
+
+    def test_manual_requests_keep_their_stricter_completion_time_boundary(self):
+        comments, reviews = self.evidence()
+        comments[0]["body"] = comments[0]["body"].replace("PR opened", "Manual request")
+        request = {"created_at": reviews[0]["submitted_at"]}
+        self.assertEqual(policy.review_result(SHA, request, comments, reviews, [], []), "pending")
+        self.assertEqual(policy.review_result(SHA, request, comments, [], [], [], automatic=True), "pending")
 
     def test_old_foreign_or_unbound_reviews_do_not_satisfy_automatic_review(self):
         comments, reviews = self.evidence()

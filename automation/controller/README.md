@@ -27,7 +27,7 @@ Only eligible research PRs can merge automatically. The `automation:no-merge` la
 
 Release notes include merged PRs whose merge commits are in research after the last accepted snapshot. The controller rejects an incomplete or diverged comparison instead of guessing from publication dates.
 
-Use **Discovery > Retest completed combinations** only after investigating a failure. An approved editor control distinguishes environment/harness failures from new upstream behavior. Health detects stale discovery but cannot independently detect an outage of all GitHub scheduling.
+Discovery prioritizes the newest untested editor combinations, then rotates passing controls through the remaining slots. The monthly report lists combinations deferred by the three-dispatch limit. Use **Discovery > Retest completed combinations** only after investigating a failure. An approved editor control distinguishes environment/harness failures from new upstream behavior. Health detects stale discovery but cannot independently detect an outage of all GitHub scheduling.
 
 Reviewed source templates live in `automation/controller/` in the public repository. Copy its Python modules, JSON tool pins and README to this repository's root, workflow templates to `.github/workflows/`, and `config/dependabot.yml` to `.github/dependabot.yml`. No public PR code is executed in this repository with write credentials. Changes here are not deployed automatically from public PRs.
 

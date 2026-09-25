@@ -72,7 +72,7 @@ The Windows standard-user profile probe remains diagnostic: the hosted profile i
 
 ## Editor and dependency monitoring
 
-Monthly discovery checks stable ONLYOFFICE releases, validates official installer digests and dispatches compatibility tests against the latest approved published plugin. Passing combinations are retested once per monthly cycle, with at most three editor combinations per discovery pass. Failed combinations retain their outcome until a new harness/package/editor combination or an explicit manual retry. An approved-editor control helps separate upstream changes from an existing environment problem.
+Monthly discovery checks stable ONLYOFFICE releases, validates official installer digests and dispatches compatibility tests against the latest approved published plugin. At most three editor combinations run per discovery pass. Untested combinations take priority, newest version first; remaining slots rotate passing controls by their last tested month. The closing report lists deferred combinations. Failed combinations retain their outcome until a new harness/package/editor combination or an explicit manual retry. An approved-editor control helps separate upstream changes from an existing environment problem.
 
 Each editor version has one issue. Missing, malformed, duplicate or failed results leave it open. A complete pass can propose the tested editor pin to research. Monthly native component reports identify upstream versions and available advisory feeds; they do not silently replace runtime pins or license notices.
 

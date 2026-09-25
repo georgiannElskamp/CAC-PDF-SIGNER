@@ -13,6 +13,64 @@ spec.loader.exec_module(scheduler)
 
 
 class SchedulerTests(unittest.TestCase):
+    def editor_release(self, version):
+        release = test_automation.ReleaseDiscoveryTests().release()
+        release["tag_name"] = "v" + version
+        for asset in release["assets"]:
+            asset["browser_download_url"] = asset["browser_download_url"].replace("v9.4.0", "v" + version)
+        return release
+
+    def discover(self, releases, state, cycle="2026-09", force=False):
+        commit, approved = "c" * 40, {"sha256": "b" * 64}
+        dispatched = []
+        def request(path, method="GET", body=None, **kwargs):
+            if path.endswith("commits/main"):
+                return {"sha": commit}
+            if "/releases?" in path:
+                return releases
+            if path.endswith("compatibility-test.yml/dispatches"):
+                dispatched.append(body["inputs"]["editor_tag"])
+                return None
+            self.fail("Unexpected API call: " + path)
+        def file(path, sha):
+            return approved if path.endswith("approved-plugin.json") else {"version": "9.4.0"}
+        state["lastComponentDispatch"] = scheduler.now()
+        with patch.object(scheduler, "api", side_effect=request), patch.object(scheduler, "public_file", side_effect=file), \
+             patch.object(scheduler, "resolve_plugin", side_effect=lambda api, value: value), \
+             patch.object(scheduler, "load_state", return_value=(state, "sha")), patch.object(scheduler, "save_state"), \
+             patch.object(scheduler, "window", return_value={"id": cycle}):
+            scheduler.watch(force=force)
+        return dispatched
+
+    def record(self, release, cycle="2026-08", conclusion="success"):
+        key = scheduler.fingerprint(scheduler.manifest(release), {"sha256": "b" * 64}, "c" * 40)
+        return key, {"status": "completed", "conclusion": conclusion, "cycle": cycle, "tag": release["tag_name"]}
+
+    def test_newest_untested_editor_precedes_three_old_successful_controls(self):
+        old = [self.editor_release(v) for v in ("9.4.0", "9.5.0", "9.6.0")]
+        latest = self.editor_release("10.0.0.1")
+        state = {"records": dict(self.record(r) for r in old)}
+        dispatched = self.discover([*old, latest, latest], state)
+        self.assertEqual(dispatched[0], "v10.0.0.1")
+        self.assertEqual(len(dispatched), 3)
+        self.assertEqual(len(set(dispatched)), 3)
+        self.assertEqual(state["deferredEditors"], ["v9.4.0"])
+
+    def test_monthly_controls_rotate_and_never_overtake_untested_editors(self):
+        releases = [self.editor_release(v) for v in ("9.4.0", "9.5.0", "9.6.0", "9.7.0")]
+        state = {"records": dict(self.record(r) for r in releases)}
+        self.assertEqual(self.discover(releases, state), ["v9.7.0", "v9.6.0", "v9.5.0"])
+        for record in state["records"].values():
+            record.update(status="completed", conclusion="success")
+        next_cycle = self.discover(releases, state, cycle="2026-10")
+        self.assertEqual(next_cycle[0], "v9.4.0")
+
+    def test_more_than_three_new_releases_leave_an_explicit_deferred_list(self):
+        releases = [self.editor_release(v) for v in ("9.4.0", "9.5.0", "9.6.0", "10.0.0.1")]
+        state = {"records": {}}
+        self.assertEqual(self.discover(releases, state), ["v10.0.0.1", "v9.6.0", "v9.5.0"])
+        self.assertEqual(state["deferredEditors"], ["v9.4.0"])
+
     def test_controller_and_public_workflow_agree_on_fingerprint(self):
         release = test_automation.ReleaseDiscoveryTests().release()
         approved = {"sha256": "b" * 64}

@@ -151,8 +151,8 @@ def watch(force=False):
             break
         page += 1
     state["pendingAssets"] = []
-    dispatched = 0
-    for release in sorted(releases, key=lambda value: value.get("published_at") or ""):
+    candidates = {}
+    for release in releases:
         tag = release["tag_name"]
         if release["draft"] or release["prerelease"] or not re.fullmatch(r"v\d+(?:\.\d+){1,3}", tag):
             continue
@@ -169,8 +169,16 @@ def watch(force=False):
                            and record.get("cycle") != window()["id"])
         if record and (record["status"] != "completed" or not (force or monthly_control)):
             continue
-        if dispatched >= 3:
-            break
+        candidates[key] = {"key": key, "tag": tag, "record": record,
+                           "version": tuple(-n for n in map(int, editor["version"].split(".")))}
+    # New combinations first, newest version first. Rotate passing controls by
+    # their last cycle so an unmerged pin proposal cannot starve newer releases.
+    ordered = sorted(candidates.values(), key=lambda item: (
+        item["record"] is not None, (item["record"] or {}).get("cycle", ""), item["version"]))
+    state["deferredEditors"] = [item["tag"] for item in ordered[3:]]
+    dispatched = 0
+    for item in ordered[:3]:
+        key, tag = item["key"], item["tag"]
         if not scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME")):
             raise RuntimeError("Monthly discovery deadline passed")
         # Save intent first. An ambiguous dispatch is reconciled, not blindly retried.
@@ -216,6 +224,8 @@ def health():
             problems.append(f"{record['tag']}: compatibility result is {record.get('conclusion')}; review {record.get('url', '')}.")
     for item in state.get("pendingAssets", []):
         problems.append(item["tag"] + ": " + item["reason"])
+    if state.get("deferredEditors"):
+        problems.append("Editor combinations deferred by the three-dispatch limit: " + ", ".join(state["deferredEditors"]) + ".")
     if state.get("lastComponentDispatch"):
         runs = api(f"/repos/{PUBLIC}/actions/workflows/component-watch.yml/runs?per_page=1", anonymous=True)["workflow_runs"]
         if (not runs or runs[0]["created_at"] < state["lastComponentDispatch"][:19] or report_stale(runs[0]["created_at"])

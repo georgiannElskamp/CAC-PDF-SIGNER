@@ -62,21 +62,17 @@ def automatic_review(sha, comments, reviews, inline):
             and c.get("pull_request_review_id") in ids for c in inline)
             or any(r.get("state") == "CHANGES_REQUESTED" or re.search(r"\[P[0-3]\]", r.get("body") or "") for r in current)):
         return "findings", since
-    # Reuse the existing completion/clean checks, allowing native PR triggers.
-    adapted = []
-    for comment in comments:
-        item = dict(comment)
-        item["body"] = re.sub(r"\b(?:PR opened|Ready for review|New commits)\b", "Manual request", item.get("body") or "")
-        adapted.append(item)
-    result = review_result(sha, {"created_at": since}, adapted, reviews, inline, [])
+    result = review_result(sha, {"created_at": since}, comments, reviews, inline, [], automatic=True)
     return result, since
 
 
-def review_result(sha, request, comments, reviews, inline, reactions):
+def review_result(sha, request, comments, reviews, inline, reactions, *, automatic=False):
     since = request["created_at"]
     def fresh(item):
         return item["user"]["login"] == CODEX and (item.get("submitted_at") or item.get("created_at") or "") >= since
     current = {r["id"]: r for r in reviews if fresh(r) and r["commit_id"] == sha}
+    if automatic and not current:
+        return "pending"
     findings = [c for c in inline if fresh(c) and c.get("original_commit_id") == sha
                 and c.get("pull_request_review_id") in current]
     if findings or any(r.get("state") == "CHANGES_REQUESTED" or re.search(r"\[P[0-3]\]", r.get("body", "")) for r in current.values()):
@@ -90,8 +86,11 @@ def review_result(sha, request, comments, reviews, inline, reactions):
             continue
         for line in body.splitlines():
             stamps = re.findall(r'datetime="([^"]+)"', line)
+            native_trigger = automatic and any(t in line for t in ("PR opened", "Ready for review", "New commits"))
+            # Native summaries can date the trigger, before the API review was
+            # submitted. The exact commit and updated summary bind completion.
             if ("Code Review" in line and "Completed" in line and f"`{sha[:7]}`" in line
-                    and "Manual request" in line and any(s[:19] >= since[:19] for s in stamps)):
+                    and (native_trigger or ("Manual request" in line and any(s[:19] >= since[:19] for s in stamps)))):
                 completed = True
     clean = any(fresh(c) and "Codex Review: Didn't find any major issues." in (c.get("body") or "")
                 and re.search(r"\*\*Reviewed commit:\*\* `" + sha[:10] + r"[a-f0-9]*`", c["body"])
