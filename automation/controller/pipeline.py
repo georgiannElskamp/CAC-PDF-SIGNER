@@ -9,6 +9,7 @@ from github_api import api, optional, pages, text_file, State, OWNER, PUBLIC
 from pipeline_policy import APP, PERMANENT, eligible, sensitive, pin_only, next_version, candidate_run, review_result
 from pipeline_policy import CODEX
 import repair_patch
+import maintenance
 
 REPO = "/repos/" + PUBLIC
 REQUIRED = {"test (windows-latest)", "test (ubuntu-latest)", "lint-workflows", "review", "Runtime build requirement"}
@@ -91,8 +92,16 @@ def request_once(state, record, pull, kind, detail=""):
         record[kind] = {"id": previous[0]["id"], "created_at": previous[0]["created_at"], "marker": marker}
         state.save()
         return previous[0]
+    prior = record.get(kind, {})
+    if prior.get("state") == "budget-exhausted" and (
+            prior.get("cycle") != maintenance.window()["id"] or os.environ.get("GITHUB_EVENT_NAME") == "workflow_dispatch"):
+        del record[kind]
     if kind in record:
         return None  # A saved intent without an observed response needs reconciliation, not another task.
+    if os.environ.get("GITHUB_EVENT_NAME") == "schedule" or (os.environ.get("PR_ONLY") == "true" and maintenance.window()["active"]):
+        if not maintenance.claim(state, "codex-" + kind, limit=12 if kind == "review" else 6):
+            record[kind] = {"created_at": now(), "state": "budget-exhausted", "cycle": maintenance.window()["id"]}
+            return None
     if kind == "review":
         prompt = (f"@codex review PR #{number} at commit {sha}. Check the actual diff and its callers for "
             "correctness, Windows/Linux installation, signing, privacy and regressions. Report actionable findings "
@@ -125,14 +134,24 @@ def request_once(state, record, pull, kind, detail=""):
 
 
 def review(state, record, pull):
+    number, sha = pull["number"], pull["head"]["sha"]
+    comments = pages(REPO + f"/issues/{number}/comments", credential="CODEX_TRIGGER_TOKEN")
+    reviews = pages(REPO + f"/pulls/{number}/reviews", credential="CODEX_TRIGGER_TOKEN")
+    inline = pages(REPO + f"/pulls/{number}/comments", credential="CODEX_TRIGGER_TOKEN")
+    # Adopt connector evidence for this commit before requesting another review.
+    if not record.get("review") or record["review"].get("automatic"):
+        from pipeline_policy import automatic_review
+        evidence = automatic_review(sha, comments, reviews, inline)
+        if evidence:
+            record["review"] = {"created_at": evidence[1], "automatic": True}
+            state.save()
+            return evidence[0]
+        if record.get("review", {}).get("automatic"):
+            return "pending"
     request = request_once(state, record, pull, "review")
     if not request:
         return "ambiguous"
-    number = pull["number"]
-    return review_result(pull["head"]["sha"], request,
-        pages(REPO + f"/issues/{number}/comments", credential="CODEX_TRIGGER_TOKEN"),
-        pages(REPO + f"/pulls/{number}/reviews", credential="CODEX_TRIGGER_TOKEN"),
-        pages(REPO + f"/pulls/{number}/comments", credential="CODEX_TRIGGER_TOKEN"),
+    return review_result(sha, request, comments, reviews, inline,
         pages(REPO + f"/issues/comments/{request['id']}/reactions", credential="CODEX_TRIGGER_TOKEN"))
 
 
@@ -181,6 +200,9 @@ def repair(state, root, record, pull, detail):
             return
         root["repairs"] = root.get("repairs", 0) + 1
     request_once(state, record, pull, "repair", detail)
+    if record["repair"].get("state") == "budget-exhausted":
+        status(pull["head"]["sha"], "pending", "Monthly correction budget exhausted; explicit run or next cycle required")
+        return
     if apply_repair(state, record, pull):
         return
     timed_out = expired(record["repair"]["created_at"])
@@ -248,6 +270,8 @@ def process_pull(state, pull, dry_run=False):
     status(sha, "success", "Tests and review passed; manual merge available" if held
            else "Fresh Codex review and complete tests passed")
     if held:
+        return
+    if not maintenance.scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME")):
         return
     try:
         result = api(REPO + f"/pulls/{number}/merge", "PUT", {"sha": sha, "merge_method": "merge"})
@@ -460,13 +484,22 @@ def main():
     parser.add_argument("--dry-run", action="store_true")
     parser.add_argument("--release-type", choices=("auto", "major", "minor", "patch"), default="auto")
     parser.add_argument("--pull", type=int)
+    parser.add_argument("--pr-only", action="store_true", help="Reconcile existing PRs without discovery or promotion")
     args = parser.parse_args()
     if os.environ.get("GITHUB_REPOSITORY") != OWNER + "/cac-pdf-signer-automation":
         raise SystemExit("Controller requires its private GitHub repository")
+    if not maintenance.scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME")):
+        print("Outside the monthly maintenance window")
+        return
     if api("/user", credential="CODEX_TRIGGER_TOKEN")["login"] != OWNER:
         raise SystemExit("Codex trigger identity changed")
     state = State()
-    if not args.pull:
+    full_pass = not args.pull and not args.pr_only
+    if full_pass and not args.dry_run:
+        state.data["fullReconciliation"] = {"runId": os.environ.get("GITHUB_RUN_ID"),
+                                            "cycle": maintenance.window()["id"]}
+        state.save()
+    if full_pass:
         for pull in pages(REPO + "/pulls?state=open&base=main"):
             if pull["user"]["login"] == "dependabot[bot]" and pull["head"]["repo"]["full_name"] == PUBLIC:
                 if not args.dry_run:
@@ -474,15 +507,20 @@ def main():
                 print(f"Dependency PR #{pull['number']} routed to research", flush=True)
     pulls = [api(REPO + f"/pulls/{args.pull}")] if args.pull else pages(REPO + "/pulls?state=open&base=research")
     for pull in pulls:
+        maintenance.require_window()
         if not eligible(pull):
             continue
         if not args.pull:
             pull = api(REPO + f"/pulls/{pull['number']}")
         reconcile_pull(state, pull, args.dry_run)
-    if not args.pull:
+    maintenance.require_window()
+    if full_pass:
         promote(state, args.release_type, args.dry_run)
     if not args.dry_run:
+        maintenance.require_window()
         state.data["lastSuccessfulPoll"] = now()
+        if full_pass:
+            state.data["fullReconciliation"]["completedAt"] = now()
         state.save()
 
 
