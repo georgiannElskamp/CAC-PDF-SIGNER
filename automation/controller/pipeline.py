@@ -98,7 +98,7 @@ def request_once(state, record, pull, kind, detail=""):
         del record[kind]
     if kind in record:
         return None  # A saved intent without an observed response needs reconciliation, not another task.
-    if os.environ.get("GITHUB_EVENT_NAME") == "schedule":
+    if os.environ.get("GITHUB_EVENT_NAME") == "schedule" or (os.environ.get("PR_ONLY") == "true" and maintenance.window()["active"]):
         if not maintenance.claim(state, "codex-" + kind, limit=12 if kind == "review" else 6):
             record[kind] = {"created_at": now(), "state": "budget-exhausted", "cycle": maintenance.window()["id"]}
             return None

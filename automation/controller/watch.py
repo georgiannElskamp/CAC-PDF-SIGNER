@@ -10,7 +10,7 @@ import re
 import urllib.error
 import urllib.request
 from release_manifest import resolve as resolve_plugin
-from maintenance import window
+from maintenance import window, scheduled_allowed
 
 PUBLIC = "georgiannElskamp/CAC-PDF-SIGNER"
 UPSTREAM = "ONLYOFFICE/DesktopEditors"
@@ -110,6 +110,8 @@ def reconcile(state, dispatch=True):
 
 
 def watch(force=False):
+    if not scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME")):
+        raise RuntimeError("Monthly discovery deadline passed")
     state, _ = load_state()
     reconcile(state)
     branch = os.environ.get("HARNESS_BRANCH", "main")
@@ -146,6 +148,8 @@ def watch(force=False):
             continue
         if dispatched >= 3:
             break
+        if not scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME")):
+            raise RuntimeError("Monthly discovery deadline passed")
         # Save intent first. An ambiguous dispatch is reconciled, not blindly retried.
         state["records"][key] = {"status": "dispatching", "tag": tag, "requestedAt": now(), "harness": commit,
                                "cycle": window()["id"]}

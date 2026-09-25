@@ -64,6 +64,16 @@ class MonthlyCalendarTests(unittest.TestCase):
         api.assert_not_called()
         state.assert_not_called()
 
+    def test_delayed_dependency_jobs_cannot_scan_or_publish_after_deadline(self):
+        with patch.dict(os.environ, {"GITHUB_EVENT_NAME": "schedule"}), \
+             patch.object(maintenance, "clock", return_value=self.local("2026-09-30T21:01:00")), \
+             patch.object(dependencies, "api") as api:
+            with self.assertRaises(RuntimeError):
+                dependencies.scan("python", Path("unused"), "unused")
+            with self.assertRaises(RuntimeError):
+                dependencies.publish("python", Path("unused"))
+        api.assert_not_called()
+
     def test_event_pass_cannot_start_release_promotion_or_dependency_retargeting(self):
         with patch.dict(os.environ, {"GITHUB_REPOSITORY": dependencies.PRIVATE, "GITHUB_EVENT_NAME": "workflow_dispatch"}), \
              patch.object(sys, "argv", ["pipeline.py", "--pr-only"]), \

@@ -9,7 +9,7 @@ import re
 import subprocess
 
 from github_api import api, pages, optional, PUBLIC, PRIVATE, State
-from maintenance import claim, window
+from maintenance import claim, window, scheduled_allowed
 from pipeline_policy import pin_only
 
 TARGETS = {"python": (PUBLIC, "research", "pip"),
@@ -93,6 +93,8 @@ def prepare(target, output):
 
 
 def scan(target, output, executable):
+    if not scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME")):
+        raise RuntimeError("Monthly scan deadline passed")
     prepare(target, output)
     pins = json.loads(PINS.read_text())
     image = pins["images"][TARGETS[target][2]]
@@ -141,6 +143,8 @@ def probe(target, output, executable):
 
 
 def publish(target, output, dry_run=False):
+    if not dry_run and not scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME")):
+        raise RuntimeError("Monthly publication deadline passed; proposals retained for review")
     repo, branch, _ = TARGETS[target]
     credential = "GH_TOKEN" if target == "controller" or dry_run else "APP_TOKEN"
     def request(path, method="GET", body=None):
