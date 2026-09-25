@@ -200,6 +200,16 @@ class MonthlyCalendarTests(unittest.TestCase):
         self.assertIn("github.ref == 'refs/heads/main'", claim)
         self.assertIn("inputs.dry_run != true", claim)
 
+    def test_exhausted_correction_budget_does_not_parse_an_unrequested_reply(self):
+        record = {}
+        def exhausted(*args):
+            record["repair"] = {"state": "budget-exhausted", "created_at": STAMP}
+        with patch.object(pipeline, "request_once", side_effect=exhausted), \
+             patch.object(pipeline, "apply_repair") as apply, patch.object(pipeline, "status") as status:
+            pipeline.repair(Mock(), {}, record, pull(), "findings")
+        apply.assert_not_called()
+        self.assertEqual(status.call_args.args[1], "pending")
+
 
 class DependencyProposalTests(unittest.TestCase):
     def output(self, path="requirements-lock.txt", content="example==2.0.0\n", **extra):

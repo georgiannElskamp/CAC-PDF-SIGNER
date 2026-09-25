@@ -200,6 +200,9 @@ def repair(state, root, record, pull, detail):
             return
         root["repairs"] = root.get("repairs", 0) + 1
     request_once(state, record, pull, "repair", detail)
+    if record["repair"].get("state") == "budget-exhausted":
+        status(pull["head"]["sha"], "pending", "Monthly correction budget exhausted; explicit run or next cycle required")
+        return
     if apply_repair(state, record, pull):
         return
     timed_out = expired(record["repair"]["created_at"])
