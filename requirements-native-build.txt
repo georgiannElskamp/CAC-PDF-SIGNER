@@ -1,0 +1,4 @@
+-r requirements-build.txt
+-r requirements-linux.txt
+meson==1.9.2
+ninja==1.13.0

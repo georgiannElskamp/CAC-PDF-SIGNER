@@ -21,7 +21,7 @@ The build limits native-library lookup to Python and Windows directories. Window
 
 ## Linux worker
 
-Build in isolated x86_64 Linux with glibc 2.28 and GCC 8.3 or a compatible compiler. `native_linux/runtime.json` pins Python. Install both `requirements-build.txt` and `requirements-linux.txt`, plus Meson and Ninja, into its environment. This uses the same PyInstaller pin as Windows. Native build tools include make, pkg-config, flex, autoconf, automake, libtool, Perl and binutils (`readelf`).
+Build in isolated x86_64 Linux with glibc 2.28 and GCC 8.3 or a compatible compiler. `native_linux/runtime.json` pins Python. Install `requirements-native-build.txt`; it includes the shared worker requirements and pinned Meson/Ninja tools. This uses the same PyInstaller and setuptools pins as Windows. Native build tools include make, pkg-config, flex, autoconf, automake, libtool, Perl and binutils (`readelf`).
 
 Download the archives listed in `native_linux/sources.json` into `/opt/src`, then run `sh native_linux/build_middleware.sh`. The script verifies source checksums and builds into `/opt/native`. `CAC_NATIVE_PREFIX`, `CAC_NATIVE_SOURCES` and `CAC_NATIVE_WORK` can select other absolute paths. Use fresh output and work directories.
 

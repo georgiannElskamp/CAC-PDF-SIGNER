@@ -49,7 +49,7 @@ jobs:
         with:
           name: linux-worker
           path: ${{ runner.temp }}/build-input
-      - run: python -m pip install -r requirements-build.txt setuptools==80.9.0
+      - run: python -m pip install -r requirements-build.txt
       - name: Verify bridge and unpack Linux bundle
         run: python -B tools/candidate.py inputs "$RUNNER_TEMP/build-input"
       - name: Build Windows worker and combined plugin

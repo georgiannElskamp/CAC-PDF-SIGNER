@@ -12,9 +12,8 @@ RUN curl -fL --retry 2 "$(jq -r .python.url /opt/pins/runtime.json)" -o /opt/pyt
     && tar -xf /opt/python.tar.gz -C /opt && rm /opt/python.tar.gz \
     && /opt/python/bin/python3 -m venv /opt/venv
 ENV PATH=/opt/venv/bin:/opt/python/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-COPY requirements-lock.txt requirements-linux.txt requirements-build.txt /opt/requirements/
-RUN python -m pip install -r /opt/requirements/requirements-build.txt -r /opt/requirements/requirements-linux.txt \
-    meson==1.9.2 ninja==1.13.0 setuptools==80.9.0
+COPY requirements-lock.txt requirements-linux.txt requirements-build.txt requirements-native-build.txt /opt/requirements/
+RUN python -m pip install -r /opt/requirements/requirements-native-build.txt
 RUN mkdir /opt/src && jq -r '.[] | [.url,.file,.sha256] | @tsv' /opt/pins/sources.json | \
     while read -r url name digest; do \
       curl -fL --retry 2 "$url" -o "/opt/src/$name"; \

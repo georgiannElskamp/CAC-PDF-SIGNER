@@ -41,6 +41,8 @@ In form mode, the first click converts the editor's loaded PDF snapshot into a s
 
 Changes flow through `research`, a frozen `release-verification` candidate, and maintainer-approved `main`. Only main publishes a GitHub release. See the [maintenance guide](docs/AUTOMATION.md).
 
+Routine editor and dependency updates run monthly on the 30th, with February's last day as a fallback. Dependency proposals update the actual build pins and pass the Windows/Linux checks. PR reviews and explicit requests remain available throughout the month.
+
 The signing modules stay at the root; editor integration is in `plugin/`, build and release commands in `tools/`, and checks in `tests/`. Generated release assets are excluded from Git. The package includes the corresponding source and dependency notices.
 
 - [Architecture and repository layout](docs/ARCHITECTURE.md)

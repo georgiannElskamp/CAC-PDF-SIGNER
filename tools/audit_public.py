@@ -37,7 +37,7 @@ REVIEWED_PDFS = {
     "tests/fixtures/onlyoffice-form.pdf": "8507e0c85d88f1f4637d09e17cc9a47f3394a2d12c3aebcf7ba82dc00ca97d52",
 }
 TEXT_SUFFIXES = {".py", ".js", ".html", ".json", ".md", ".txt", ".yml", ".yaml", ".cmd", ".sh", ".ps1", ".patch"}
-TEXT_NAMES = {".gitignore", ".gitattributes", "LICENSE", "NOTICE", "Dockerfile", "CODEOWNERS"}
+TEXT_NAMES = {".gitignore", ".gitattributes", ".python-version", "LICENSE", "NOTICE", "Dockerfile", "CODEOWNERS"}
 PATTERNS = {
     "embedded key or certificate": re.compile(
         rb"-----BEGIN (?:[A-Z ]*PRIVATE KEY|PUBLIC KEY|CERTIFICATE)-----"

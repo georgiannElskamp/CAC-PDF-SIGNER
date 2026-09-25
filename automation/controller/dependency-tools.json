@@ -1,0 +1,9 @@
+{
+  "cliVersion": "v1.93.0",
+  "cliSha256": "3c89e7a3d04066115a8d17574267ae288cb67f9dcb7096f9c7ce96ee180849ba",
+  "images": {
+    "pip": "ghcr.io/dependabot/dependabot-updater-pip@sha256:2bba328cb918a0b04dfdb9d1ffa5e212f970dae965d980d49606e812c65345f3",
+    "github_actions": "ghcr.io/dependabot/dependabot-updater-github-actions@sha256:daa47db2d24aab3e20f5a6ffb9267bb0f28408ea05242f16923d0996b14f9939",
+    "proxy": "ghcr.io/dependabot/proxy@sha256:18de7d168d9ef2975d57f02f253d4f15dfb94c1c4520a2984a0cfc74a4daed58"
+  }
+}

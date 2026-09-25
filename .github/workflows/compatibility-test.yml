@@ -127,7 +127,7 @@ jobs:
         with:
           name: compatibility-${{ matrix.os }}
           path: ${{ runner.temp }}/report
-          retention-days: 14
+          retention-days: 90
           if-no-files-found: error
       - name: Require candidate editor pass
         if: steps.editor.outcome != 'success'
@@ -172,7 +172,7 @@ jobs:
             ${{ runner.temp }}/report/signed-preview.png
             ${{ runner.temp }}/report/field-screen.png
             ${{ runner.temp }}/report/ui-failure.png
-          retention-days: 14
+          retention-days: 90
           if-no-files-found: error
       - name: Preserve separate baseline evidence
         if: always() && steps.baseline.outcome != 'skipped'
@@ -188,7 +188,7 @@ jobs:
         with:
           name: compatibility-simulation-control
           path: ${{ runner.temp }}/control-report/baseline-*
-          retention-days: 14
+          retention-days: 90
           if-no-files-found: warn
       - name: Require candidate signing pass
         if: steps.signing.outcome != 'success'
