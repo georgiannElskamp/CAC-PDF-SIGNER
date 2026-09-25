@@ -10,6 +10,7 @@ import re
 import urllib.error
 import urllib.request
 from release_manifest import resolve as resolve_plugin
+from maintenance import window
 
 PUBLIC = "georgiannElskamp/CAC-PDF-SIGNER"
 UPSTREAM = "ONLYOFFICE/DesktopEditors"
@@ -89,19 +90,19 @@ def fingerprint(editor, approved, commit):
     return hashlib.sha256(json.dumps(value, sort_keys=True).encode()).hexdigest()
 
 
-def reconcile(state):
+def reconcile(state, dispatch=True):
     for key, record in state["records"].items():
         if record["status"] not in ("dispatching", "pending"):
             continue
         if not record.get("runId"):
-            runs = api(f"/repos/{PUBLIC}/actions/workflows/compatibility-test.yml/runs?event=workflow_dispatch&per_page=100", dispatch=True)["workflow_runs"]
+            runs = api(f"/repos/{PUBLIC}/actions/workflows/compatibility-test.yml/runs?event=workflow_dispatch&per_page=100", dispatch=dispatch)["workflow_runs"]
             requested = datetime.fromisoformat(record["requestedAt"]) - timedelta(seconds=1)
             matches = [run for run in runs if key in run["display_title"]
                        and datetime.fromisoformat(run["created_at"].replace("Z", "+00:00")) >= requested]
             if len(matches) == 1:
                 record["runId"] = matches[0]["id"]
         if record.get("runId"):
-            run = api(f"/repos/{PUBLIC}/actions/runs/{record['runId']}", dispatch=True)
+            run = api(f"/repos/{PUBLIC}/actions/runs/{record['runId']}", dispatch=dispatch)
             record.update(status="completed" if run["status"] == "completed" else "pending",
                           conclusion=run.get("conclusion"), url=run["html_url"])
             if run["status"] == "completed":
@@ -139,13 +140,15 @@ def watch(force=False):
             continue
         key = fingerprint(editor, approved, commit)
         record = state["records"].get(key)
-        weekly_control = record and record.get("conclusion") == "success" and stale(record.get("completedAt"), 168)
-        if record and (record["status"] != "completed" or not (force or weekly_control)):
+        monthly_control = (record and record.get("conclusion") == "success"
+                           and record.get("cycle") != window()["id"])
+        if record and (record["status"] != "completed" or not (force or monthly_control)):
             continue
         if dispatched >= 3:
             break
         # Save intent first. An ambiguous dispatch is reconciled, not blindly retried.
-        state["records"][key] = {"status": "dispatching", "tag": tag, "requestedAt": now(), "harness": commit}
+        state["records"][key] = {"status": "dispatching", "tag": tag, "requestedAt": now(), "harness": commit,
+                               "cycle": window()["id"]}
         save_state(state)
         response = api(f"/repos/{PUBLIC}/actions/workflows/compatibility-test.yml/dispatches", "POST",
                        {"ref": branch, "inputs": {"editor_tag": tag, "request_id": key}}, dispatch=True)
@@ -155,15 +158,17 @@ def watch(force=False):
         save_state(state)
         dispatched += 1
     state["lastSuccessfulPoll"] = now()
-    if stale(state.get("lastComponentDispatch"), 168):
-        api(f"/repos/{PUBLIC}/actions/workflows/component-watch.yml/dispatches", "POST", {"ref": branch}, dispatch=True)
+    if stale(state.get("lastComponentDispatch"), 24):
         state["lastComponentDispatch"] = now()
+        save_state(state)
+        api(f"/repos/{PUBLIC}/actions/workflows/component-watch.yml/dispatches", "POST", {"ref": branch}, dispatch=True)
     save_state(state)
     print(f"Dispatched {dispatched}; waiting for assets: {len(state['pendingAssets'])}")
 
 
 def health():
     state, _ = load_state()
+    reconcile(state, dispatch=False)
     problems = []
     if os.environ.get("PIPELINE_ENABLED") == "true":
         try:
@@ -173,29 +178,47 @@ def health():
             if error.code != 404:
                 raise
             pipeline = {}
-        if stale(pipeline.get("lastSuccessfulPoll"), 3):
-            problems.append("Research controller has no successful reconciliation in three hours.")
-    if stale(state.get("lastSuccessfulPoll"), 48):
-        problems.append("No successful discovery in the past 48 hours. Check App credentials and the Discovery workflow.")
+        if stale(pipeline.get("lastSuccessfulPoll"), 35 * 24):
+            problems.append("Research controller has no successful reconciliation in 35 days.")
+    if stale(state.get("lastSuccessfulPoll"), 35 * 24):
+        problems.append("No successful monthly discovery in 35 days. Check App credentials and the discovery workflow.")
     for key, record in state["records"].items():
-        if record["status"] != "completed" and stale(record.get("requestedAt"), 24):
+        if record["status"] != "completed":
             problems.append(f"{record['tag']}: dispatch {key[:12]} has no completed result. Inspect before manually retrying.")
+        elif record.get("cycle") == window()["id"] and record.get("conclusion") != "success":
+            problems.append(f"{record['tag']}: compatibility result is {record.get('conclusion')}; review {record.get('url', '')}.")
     for item in state.get("pendingAssets", []):
         problems.append(item["tag"] + ": " + item["reason"])
     if state.get("lastComponentDispatch"):
         runs = api(f"/repos/{PUBLIC}/actions/workflows/component-watch.yml/runs?per_page=1", anonymous=True)["workflow_runs"]
-        if not runs or stale(runs[0]["created_at"], 192) or (runs[0]["status"] == "completed" and runs[0]["conclusion"] != "success"):
-            problems.append("The weekly component watch is missing, stale or unsuccessful.")
-    title = "Scheduler health"
+        if not runs or stale(runs[0]["created_at"], 35 * 24) or runs[0]["conclusion"] != "success":
+            problems.append("The monthly component watch is missing, stale, pending or unsuccessful.")
+    discovery = api(f"/repos/{PRIVATE}/actions/workflows/discovery.yml/runs?branch=main&per_page=1")["workflow_runs"]
+    if not discovery or stale(discovery[0]["created_at"], 35 * 24) or discovery[0]["conclusion"] != "success":
+        problems.append("Monthly dependency/discovery workflow needs attention; dependency updates are not verified.")
+    rows = []
+    for repo in (PUBLIC, PRIVATE):
+        pulls = api(f"/repos/{repo}/pulls?state=open&per_page=100")
+        if len(pulls) == 100:
+            problems.append(repo + ": PR listing may be incomplete.")
+        for pull in pulls:
+            rows.append(f"- [{repo} #{pull['number']}]({pull['html_url']}), target `{pull['base']['ref']}`, commit `{pull['head']['sha']}`.")
+    title = "Monthly maintenance " + window()["id"]
     issues = api(f"/repos/{PRIVATE}/issues?state=all&per_page=100")
     issue = next((item for item in issues if item["title"] == title and not item.get("pull_request")
                   and item.get("user", {}).get("login") == "github-actions[bot]"), None)
-    body = "\n\n".join(problems) if problems else "Discovery and dispatch reconciliation are current."
-    values = {"title": title, "body": body, "state": "open" if problems else "closed"}
+    body = ("## Maintenance outcome\n\n" + ("\n\n".join(problems) if problems else "Scheduled checks completed. Review the linked PR evidence before approving.")
+            + "\n\n## Pull requests awaiting review or integration\n\n" + ("\n".join(rows) or "No open PRs.")
+            + f"\n\n[Dependency and editor results](https://github.com/{PRIVATE}/actions/workflows/discovery.yml). "
+            + f"[Bundled component findings](https://github.com/{PUBLIC}/issues). "
+            + "Native source/SDK/license changes still require maintainer review. "
+            + "A release-verification PR must have current passing evidence before owner approval and manual merge. "
+            + "No release is approved by this report. Unfinished work waits for an explicit run or the next monthly window.")
+    values = {"title": title, "body": body, "state": "open"}
     if issue:
         if issue["body"] != body or issue["state"] != values["state"]:
             api(f"/repos/{PRIVATE}/issues/{issue['number']}", "PATCH", values)
-    elif problems:
+    else:
         api(f"/repos/{PRIVATE}/issues", "POST", {"title": title, "body": body})
     print(body)
     if problems:

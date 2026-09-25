@@ -21,7 +21,12 @@ def eligible(pull):
 
 def pin_only(before, after):
     pattern = r"(?m)(\buses:\s+[A-Za-z0-9_./-]+)@[a-f0-9]{40}(?:[ \t]+#[^\n]*)?"
-    return before != after and re.sub(pattern, r"\1@PIN", before) == re.sub(pattern, r"\1@PIN", after)
+    if before == after or re.sub(pattern, r"\1@PIN", before) != re.sub(pattern, r"\1@PIN", after):
+        return False
+    for old, new in zip(before.splitlines(), after.splitlines()):
+        if old != new and not re.search(r"\buses:\s+[A-Za-z0-9_./-]+@[a-f0-9]{40}(?:[ \t]+# ?v?\d{1,4}(?:\.\d{1,4}){0,3})?[ \t]*$", new):
+            return False
+    return True
 
 
 def sensitive(files):
@@ -43,6 +48,28 @@ def candidate_run(run, sha, branch):
             and run["event"] in {"push", "workflow_dispatch"}
             and run["head_branch"] == branch and run["head_sha"] == sha
             and run["status"] == "completed" and run["conclusion"] == "success")
+
+
+def automatic_review(sha, comments, reviews, inline):
+    """Accept completed connector reviews only with an exact API commit binding."""
+    current = [r for r in reviews if r["user"]["login"] == CODEX and r.get("commit_id") == sha
+               and r.get("submitted_at") and r.get("state") != "DISMISSED"]
+    if not current:
+        return None
+    since = min(r["submitted_at"] for r in current)
+    ids = {r["id"] for r in current}
+    if (any(c["user"]["login"] == CODEX and c.get("original_commit_id") == sha
+            and c.get("pull_request_review_id") in ids for c in inline)
+            or any(r.get("state") == "CHANGES_REQUESTED" or re.search(r"\[P[0-3]\]", r.get("body") or "") for r in current)):
+        return "findings", since
+    # Reuse the existing completion/clean checks, allowing native PR triggers.
+    adapted = []
+    for comment in comments:
+        item = dict(comment)
+        item["body"] = re.sub(r"\b(?:PR opened|Ready for review|New commits)\b", "Manual request", item.get("body") or "")
+        adapted.append(item)
+    result = review_result(sha, {"created_at": since}, adapted, reviews, inline, [])
+    return result, since
 
 
 def review_result(sha, request, comments, reviews, inline, reactions):

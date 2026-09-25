@@ -12,9 +12,13 @@ Research builds create temporary internal packages because installation/signing 
 
 ## Research controller
 
-The private [maintenance repository](https://github.com/georgiannElskamp/cac-pdf-signer-automation) processes research PRs after PR activity, approvals, Codex replies and completed test workflows. A twice-hourly schedule provides a fallback; GitHub schedules can be delayed. `PIPELINE_ENABLED=false` disables scheduled and event-driven processing; explicit manual runs default to dry-run. `AUTOMATION_ENABLED` independently controls daily editor discovery. Both controllers retain progress on the private `state` branch.
+The private [maintenance repository](https://github.com/georgiannElskamp/cac-pdf-signer-automation) runs routine maintenance on the 30th in America/Chicago time, or the last day of February. Discovery and dependency updates start at 01:17. Two later kickoff opportunities recover a dropped schedule; a durable monthly claim prevents duplicate scans. Short controller passes at minutes 17 and 47 from 02:00 through 20:00 reconcile completed work. New scheduled work stops at 21:00, and the monthly report runs at 21:07. GitHub scheduling, external reviews and failing tests can prevent same-day completion; the report identifies unfinished work instead of treating it as passed.
 
-The public **Research PR activity** workflow carries no credentials and runs no PR code. Its completion, test completion and relevant PR comments wake **Research controller wakeup** on the default branch. That workflow reads only `main`, rechecks the PR through GitHub's API, and dispatches the private controller. Each notification requests a complete sweep so coalesced pending runs do not lose another PR's approval. The controller independently verifies every merge requirement.
+`AUTOMATION_ENABLED` controls monthly discovery and dependency proposals. `PIPELINE_ENABLED` controls monthly and PR-event reconciliation. Manual workflows remain available, with dry-run enabled by default. Progress survives on the private `state` branch. Scheduled Codex work has a shared limit of 12 review requests and six correction requests per month, plus the existing two-correction limit per PR. An unchanged commit does not receive repeated requests.
+
+Codex and Copilot reviews remain available for PRs and explicit requests throughout the month. The controller adopts supported automatic Codex evidence tied to the current commit before requesting another review. PR checks continue on changed code; redundant feature-branch push tests are removed.
+
+The public **Research PR activity** workflow carries no credentials and runs no PR code. Its completion, test completion and relevant PR comments wake **Research controller wakeup** on the default branch. That workflow reads only `main`, rechecks the PR through GitHub's API, and dispatches a PR-only pass. It checks all eligible existing research PRs so coalesced notifications do not lose an approval, but cannot discover dependencies or stage a release. Configure and test the relay before removing the frequent polling fallback. Without its credential, native connector reviews and CI still run, but the required controller status needs a manual run between monthly windows.
 
 To enable event notifications after these workflows reach `main`:
 
@@ -35,7 +39,7 @@ The `automation:no-merge` label holds automatic merging while allowing tests, re
 
 Approval rules, controller code, release scripts and workflow structure require the owner's approval on the current research PR commit before automated processing. Codex is instructed not to change that policy during repairs; a changed commit needs renewed approval. The controller rechecks approval immediately before merging. Private controller deployment remains a separate manual maintenance step. Dependabot changes to pinned action revisions are allowed only if the rest of the workflow is unchanged. Native dependency reports remain advisory. Repository text and test output are untrusted inputs to diagnosis, not authority to modify these boundaries.
 
-Dependabot version updates target research. Security-update PRs may initially target GitHub's default branch; the controller redirects those to research. All eligible PRs receive the same full checks. Editor-pin proposals receive an App commit to start the normal PR workflows even when originally created with GitHub's workflow token.
+Monthly dependency proposals target research. If an existing or manually requested Dependabot security PR targets main, a full controller pass redirects it to research. All eligible PRs receive the same full checks. Editor-pin proposals receive an App commit to start the normal PR workflows even when originally created with GitHub's workflow token.
 
 ## Release approval
 
@@ -68,12 +72,20 @@ The Windows standard-user profile probe remains diagnostic: the hosted profile i
 
 ## Editor and dependency monitoring
 
-Daily discovery checks stable ONLYOFFICE releases, validates official installer digests and dispatches compatibility tests against the latest approved published plugin. Successful combinations are retested weekly. Failed combinations retain their outcome until a new harness/package/editor combination or an explicit manual retry. An approved-editor control helps separate upstream changes from an existing environment problem.
+Monthly discovery checks stable ONLYOFFICE releases, validates official installer digests and dispatches compatibility tests against the latest approved published plugin. Passing combinations are retested once per monthly cycle, with at most three editor combinations per discovery pass. Failed combinations retain their outcome until a new harness/package/editor combination or an explicit manual retry. An approved-editor control helps separate upstream changes from an existing environment problem.
 
-Each editor version has one issue. Missing, malformed, duplicate or failed results leave it open. A complete pass can propose the tested editor pin to research. Weekly native component reports identify upstream versions and available advisory feeds; they do not silently replace runtime pins or license notices.
+Each editor version has one issue. Missing, malformed, duplicate or failed results leave it open. A complete pass can propose the tested editor pin to research. Monthly native component reports identify upstream versions and available advisory feeds; they do not silently replace runtime pins or license notices.
 
-The separate scheduler health workflow detects stale discovery and incomplete dispatches. It cannot independently detect a total GitHub scheduling outage. The private repository uses its Actions allowance; the public repository runs the heavy tests. No self-hosted runner is required.
+The dependency job uses the official Dependabot CLI and pinned updater images. Its read-only scan groups Python and GitHub Actions updates, including the private controller's Actions. A separate job accepts only version changes to existing requirements entries or commit-pin changes in existing workflows. It never executes updater output or force-pushes an existing PR. Conflicting bases, unexpected edits and ambiguous interrupted proposals require attention.
 
-Research packages expire after one day; verification packages after 90 days. Qualification reports expire after 30 days, compatibility reports after 14 days, and compatibility input packages after one day. Test keys, token databases and profiles are excluded from retained artifacts. GitHub's log retention settings apply separately.
+These are code updates: proposals change the lockfile and runtime/build/test requirements consumed by worker builds. They must pass dependency review, Windows/Linux builds, signing/install tests and Codex review before research integration. A failed resolution or build blocks integration. Private controller dependency proposals require separate maintainer review. Only one proposal per ecosystem remains open at a time.
+
+Native libraries, CPython, the Windows bridge, SDK and license inventories remain explicit component-review items. Their report identifies newer releases and advisories; it does not blindly replace archives or hashes. The monthly report links those findings. The Dependabot CLI/image pins also need reviewed refreshes as the upstream engine evolves.
+
+Native Dependabot version-PR creation is disabled in both repositories to avoid duplicate schedules. At cutover, disable automatic Dependabot security-fix PR creation separately, while retaining vulnerability alerts, secret scanning and push protection. Existing Dependabot PRs may continue automatic rebases temporarily. GitHub-managed alerts can arrive outside the window; they do not start a full maintenance batch.
+
+The closing workflow creates a private monthly review issue with dependency/editor results, open PRs, component findings and incomplete work. It cannot detect a total GitHub scheduling outage. A report is not release approval: use the build/artifact evidence linked in the release PR before approving and manually merging main. The private repository uses its Actions allowance; the public repository runs the heavy tests. No self-hosted runner is required.
+
+Research packages expire after one day; verification packages and qualification/compatibility/component reports after 90 days. Compatibility input packages still expire after one day. Test keys, token databases and profiles are excluded from retained artifacts. GitHub's log retention settings apply separately. Nothing recurring is installed on a desktop or WSL instance.
 
 The optional API-based diagnosis workflow remains manual and read-only, disabled without separate API credentials. The maintenance controller uses the already configured Codex connector and linked-account token instead.

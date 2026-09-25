@@ -9,7 +9,7 @@ class NativeManifestTests(unittest.TestCase):
     def test_git_line_endings_do_not_stale_runtime_inputs(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            for name in ("worker.py", "requirements-lock.txt", "requirements-linux.txt", "requirements-build.txt"):
+            for name in ("worker.py", "requirements-lock.txt", "requirements-linux.txt", "requirements-build.txt", "requirements-native-build.txt"):
                 (root / name).write_bytes(b"first\r\nsecond\r\n")
             expected = source_hashes(root)
             for path in root.iterdir():
@@ -23,7 +23,7 @@ class NativeManifestTests(unittest.TestCase):
             bundle.mkdir()
             (root / "fonts").mkdir()
             inputs = [root / "worker.py", root / "requirements-lock.txt",
-                      root / "requirements-linux.txt", root / "requirements-build.txt", root / "fonts/example.ttf"]
+                      root / "requirements-linux.txt", root / "requirements-build.txt", root / "requirements-native-build.txt", root / "fonts/example.ttf"]
             for path in inputs:
                 path.write_bytes(b"original")
             payload = bundle / "worker"

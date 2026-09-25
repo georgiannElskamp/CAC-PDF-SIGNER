@@ -15,6 +15,8 @@ python -B tools/audit_public.py
 
 The Python suite checks PDF conversion, signature integrity, handoff records, Save As protection, recovery, platform boundaries and controller decisions. The JavaScript suites check adapter and native-host behavior. The publication audit permits only a hash-pinned, synthetic ONLYOFFICE form PDF under `tests/fixtures/`; it rejects other PDFs and generated files from source.
 
+Monthly-maintenance tests cover the calendar and deadline, leap years, durable budgets, PR-only reconciliation, current-commit Codex evidence and rejection of unsafe dependency proposals. The private discovery workflow's manual dry-run also exercises the real Dependabot engine against the repositories and synthetic old pins. Updater jobs have no write credentials; Python metadata resolution has no repository or registry credentials. Full package builds remain required after dependency pins change.
+
 For a built package, run `python -B tools/verify_package.py <path-to-CAC-PDF-Signer.plugin>`. Add `--preflight` to check the packaged worker's desktop dependencies and recovery storage. Neither option accesses a card. Node is needed by this test on Windows, but not by end users.
 
 ## Hosted qualification

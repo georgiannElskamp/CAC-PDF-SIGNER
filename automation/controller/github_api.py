@@ -48,8 +48,10 @@ def text_file(path, ref):
 
 
 class State:
-    def __init__(self):
-        self.path = f"/repos/{PRIVATE}/contents/pipeline.json"
+    def __init__(self, filename="pipeline.json"):
+        if filename not in {"pipeline.json", "monthly.json"}:
+            raise ValueError("Unsupported state file")
+        self.path = f"/repos/{PRIVATE}/contents/{filename}"
         item = optional(self.path + "?ref=state", credential="GH_TOKEN")
         self.sha = item["sha"] if item else None
         self.data = json.loads(base64.b64decode(item["content"])) if item else {"pulls": {}}

@@ -4,9 +4,12 @@ updates:
     directory: /
     target-branch: research
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 5
+      interval: cron
+      cronjob: '17 1 30 * *'
+      timezone: America/Chicago
+    # Version PRs come from the shared monthly controller, including February.
+    open-pull-requests-limit: 0
+    rebase-strategy: disabled
     groups:
       test-and-build:
         patterns: [reportlab, pyinstaller, pyinstaller-hooks-contrib]
@@ -15,9 +18,11 @@ updates:
     directory: /
     target-branch: research
     schedule:
-      interval: weekly
-      day: monday
-    open-pull-requests-limit: 3
+      interval: cron
+      cronjob: '17 1 30 * *'
+      timezone: America/Chicago
+    open-pull-requests-limit: 0
+    rebase-strategy: disabled
     groups:
       actions:
         patterns: ['*']

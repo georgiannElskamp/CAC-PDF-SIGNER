@@ -1,21 +1,127 @@
-name: Discovery
+name: Monthly discovery and dependencies
 on:
   schedule:
-    - cron: '23 8 * * *'
+    - cron: '17 1-3 30 1,3-12 *'
+      timezone: America/Chicago
+    - cron: '17 1-3 28,29 2 *'
+      timezone: America/Chicago
   workflow_dispatch:
     inputs:
+      dry_run:
+        description: Validate dependency proposals without publishing or running compatibility tests
+        type: boolean
+        default: true
       force:
-        description: Retest completed combinations once
+        description: Retry completed compatibility failures once
         type: boolean
         default: false
 permissions:
   contents: read
 concurrency:
-  group: scheduler-state
+  group: monthly-discovery
   cancel-in-progress: false
 jobs:
-  discover:
-    if: vars.AUTOMATION_ENABLED == 'true'
+  gate:
+    if: vars.AUTOMATION_ENABLED == 'true' && (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && inputs.dry_run))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      run: ${{ steps.claim.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - id: calendar
+        run: python3 -B maintenance.py
+      - id: claim
+        if: steps.calendar.outputs.allowed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=()
+          if [[ "$DRY_RUN" == true ]]; then args+=(--dry-run); fi
+          python3 -B dependencies.py start "${args[@]}"
+  scan:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [python, actions, controller]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Download the pinned Dependabot CLI
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("dependency-tools.json"))["cliVersion"])')
+          digest=$(python3 -c 'import json; print(json.load(open("dependency-tools.json"))["cliSha256"])')
+          curl -fL --retry 2 "https://github.com/dependabot/cli/releases/download/$version/dependabot-$version-linux-amd64.tar.gz" -o "$RUNNER_TEMP/dependabot.tar.gz"
+          printf '%s  %s\n' "$digest" "$RUNNER_TEMP/dependabot.tar.gz" | sha256sum -c -
+          tar -xf "$RUNNER_TEMP/dependabot.tar.gz" -C "$RUNNER_TEMP" dependabot
+      - name: Resolve dependency updates with read-only credentials
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET: ${{ matrix.target }}
+        run: python3 -B dependencies.py scan --target "$TARGET" --output "$RUNNER_TEMP/proposal" --executable "$RUNNER_TEMP/dependabot"
+      - name: Prove synthetic pin updates during manual validation
+        if: inputs.dry_run == true
+        env:
+          TARGET: ${{ matrix.target }}
+        run: python3 -B dependencies.py probe --target "$TARGET" --output "$RUNNER_TEMP/proposal" --executable "$RUNNER_TEMP/dependabot"
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dependency-${{ matrix.target }}
+          path: |
+            ${{ runner.temp }}/proposal/metadata.json
+            ${{ runner.temp }}/proposal/result.jsonl
+          retention-days: 90
+          if-no-files-found: error
+  publish:
+    needs: scan
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: dependency-*
+          path: ${{ runner.temp }}/proposals
+      - uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        if: inputs.dry_run != true
+        id: app
+        with:
+          app-id: ${{ vars.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: georgiannElskamp
+          repositories: CAC-PDF-SIGNER
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+      - name: Validate and publish bounded proposals
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APP_TOKEN: ${{ steps.app.outputs.token }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          args=()
+          if [[ "$DRY_RUN" == true ]]; then args+=(--dry-run); fi
+          for target in python actions controller; do
+            python3 -B dependencies.py publish --target "$target" --output "$RUNNER_TEMP/proposals/dependency-$target" "${args[@]}"
+          done
+  editors:
+    needs: gate
+    if: needs.gate.outputs.run == 'true' && inputs.dry_run != true
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -32,7 +138,7 @@ jobs:
           owner: georgiannElskamp
           repositories: CAC-PDF-SIGNER
           permission-actions: write
-      - name: Discover and reconcile
+      - name: Check editors and bundled components
         env:
           GH_TOKEN: ${{ github.token }}
           DISPATCH_TOKEN: ${{ steps.app.outputs.token }}
