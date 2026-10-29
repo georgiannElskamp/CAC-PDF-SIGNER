@@ -80,6 +80,8 @@ class PipelinePolicyTests(unittest.TestCase):
         new = 'uses: actions/checkout@' + 'b' * 40 + ' # v2\n'
         self.assertTrue(policy.pin_only(old, new))
         self.assertFalse(policy.pin_only(old, new + 'run: malicious\n'))
+        smuggled = new.rstrip('\n') + '\r  - run: malicious # uses: a/b@' + 'c' * 40 + '\n'
+        self.assertFalse(policy.pin_only(old, smuggled))
         self.assertTrue(policy.sensitive([{'filename': 'safe.py', 'previous_filename': '.github/CODEOWNERS'}]))
 
     def test_candidate_requires_exact_source_branch_and_success(self):
