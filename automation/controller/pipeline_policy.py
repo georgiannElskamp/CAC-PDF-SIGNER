@@ -20,7 +20,9 @@ def eligible(pull):
 
 
 def pin_only(before, after):
-    pattern = r"(?m)(\buses:\s+[A-Za-z0-9_./-]+)@[a-f0-9]{40}(?:[ \t]+#[^\n]*)?"
+    if "\r" in before or "\r" in after:
+        return False
+    pattern = r"(?m)(\buses:\s+[A-Za-z0-9_./-]+)@[a-f0-9]{40}(?:[ \t]+#[^\r\n]*)?"
     if before == after or re.sub(pattern, r"\1@PIN", before) != re.sub(pattern, r"\1@PIN", after):
         return False
     for old, new in zip(before.splitlines(), after.splitlines()):
