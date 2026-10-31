@@ -35,9 +35,9 @@ REQUIRED_NOTICES = {
     "go-BSD-3-Clause.txt",
     "go-x-sys-BSD-3-Clause.txt",
     "openssl-3.0.13-APACHE-2.0.txt",
-    "openssl-4.0.2-APACHE-2.0.txt",
+    "openssl-4.0.3-APACHE-2.0.txt",
     "microsoft-runtime-CPython.txt",
-    "harfbuzz-14.5.0-MIT.txt",
+    "harfbuzz-15.0.0-MIT.txt",
 }
 
 
@@ -106,11 +106,13 @@ def verify_native(executable, bridge):
 def licenses():
     """Collect dependency licenses for the release archive."""
     from cryptography.hazmat.backends.openssl.backend import backend
+    import uharfbuzz
 
     if (
         sys.version_info[:3] != (3, 11, 9)
         or ssl.OPENSSL_VERSION.split()[1] != ("3.0.13" if sys.platform == "win32" else "3.0.14")
-        or backend.openssl_version_text().split()[1] != "4.0.2"
+        or backend.openssl_version_text().split()[1] != "4.0.3"
+        or uharfbuzz.version_string() != "15.0.0"
     ):
         raise ValueError("Runtime versions changed; update the native license inventory.")
     names = [
