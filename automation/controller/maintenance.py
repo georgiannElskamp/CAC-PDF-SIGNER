@@ -1,6 +1,6 @@
 """Calendar and durable limits for monthly maintenance."""
 import calendar
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import os
 from zoneinfo import ZoneInfo
 
@@ -27,8 +27,20 @@ def window(at=None):
 def scheduled_allowed(event, at=None, closing=False):
     if event != "schedule":
         return True
-    value = window(at)
-    return value["day"] if closing else value["active"]
+    if closing:
+        local = (at or clock()).astimezone(ZONE)
+        value = report_window(local)
+        return value["start"] <= local < value["end"] + timedelta(hours=24)
+    return window(at)["active"]
+
+
+def report_window(at=None):
+    """Report the most recent batch, including a delayed month-end run."""
+    local = (at or clock()).astimezone(ZONE)
+    value = window(local)
+    if local < value["start"]:
+        value = window(local.replace(day=1) - timedelta(days=1))
+    return value
 
 
 def require_window():
@@ -61,4 +73,4 @@ if __name__ == "__main__":
     allowed = scheduled_allowed(os.environ["GITHUB_EVENT_NAME"], closing=args.closing)
     with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
         output.write("allowed=" + str(allowed).lower() + "\n")
-        output.write("cycle=" + window()["id"] + "\n")
+        output.write("cycle=" + (report_window() if args.closing else window())["id"] + "\n")

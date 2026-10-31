@@ -12,14 +12,14 @@ Private Actions configuration:
 | --- | --- | --- |
 | `APP_ID` | Variable | Numeric GitHub App ID |
 | `APP_PRIVATE_KEY` | Secret | App authentication; never copy into source |
-| `CODEX_TRIGGER_TOKEN` | Secret | Separately supplied linked-account GitHub token for Codex comments |
+| `CODEX_TRIGGER_TOKEN` | Secret | Linked owner fine-grained token, restricted to CAC-PDF-SIGNER with Pull requests read/write and implicit Metadata read; track expiry and renew in Actions secrets |
 | `AUTOMATION_ENABLED` | Variable | `true` enables monthly editor and dependency discovery |
 | `PIPELINE_ENABLED` | Variable | `true` enables scheduled research processing/promotion |
 | `HARNESS_BRANCH` | Variable | `research` after migration; defaults to `main` |
 
 Start with the pipeline disabled. Run **Research and release controller** manually with dry-run enabled. After permissions, branch protections and a controlled research PR pass, enable scheduled processing. Dry-run posts no requests and writes no state. Manual runs can select one PR or propose a version increment.
 
-Maintenance runs on the 30th in America/Chicago time, with the last day of February as a fallback. Discovery starts at 01:17; two recovery starts are deduplicated by a durable claim. Controller passes run at minutes 17 and 47 from 02:00 through 20:00. Scheduled mutations stop at 21:00; the monthly report starts at 21:07. Scheduling and same-day completion are best effort. Separate files on the private `state` branch record discovery and PR/candidate progress. Requests with uncertain acknowledgements require reconciliation, not blind retries. Two Codex correction requests per PR are allowed; stalled requests require maintainer attention after six hours.
+Maintenance runs on the 30th in America/Chicago time, with the last day of February as a fallback. Discovery starts at 01:17; two recovery starts are deduplicated by a durable claim. Controller passes run at minutes 17 and 47 from 02:00 through 20:00. Scheduled mutations stop at 21:00; the monthly report starts at 21:07. A delayed report may finish within 24 hours after the cutoff and remains attached to the original monthly batch; this grace period does not allow scans, merges or other controller writes. Scheduling and same-day completion are best effort. Separate files on the private `state` branch record discovery and PR/candidate progress. Requests with uncertain acknowledgements require reconciliation, not blind retries. Two Codex correction requests per PR are allowed; stalled requests require maintainer attention after six hours.
 
 Public PR activity, completed tests and Codex replies can dispatch this controller with `event_wakeup=true`. These notifications require `PIPELINE_ENABLED=true`; explicit manual runs remain available when it is disabled. Notifications request a PR-only sweep because GitHub may replace a pending controller run with a newer one. They cannot discover dependencies or prepare a release. Set up the public `controller-dispatch` environment and its narrowly scoped Actions token using the [operation guide](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/blob/main/docs/AUTOMATION.md). The monthly schedule is the only polling fallback; configure and test the relay before cutover. No new credential belongs in source.
 
