@@ -2,6 +2,7 @@
 const fs = require("node:fs");
 const assert = require("node:assert/strict");
 const { connect, until } = require("./editor_cdp");
+const { installProbe } = require("./editor_interface");
 const GUID = "asc.{9A58C737-A6B4-4E31-8D3F-2C940B716EF9}";
 
 function fixture(destination) {
@@ -34,12 +35,13 @@ async function smoke(port, packagePath, version, fixtureName) {
   const progress = (value) => { stage = value; console.log(`Checking: ${stage}`); };
   try {
     progress("adapter interface discovery");
-    await until(() => run(() => !!Asc.editor?.jf?.file?.Mp && typeof Asc.editor.jf.Qd === "function"),
+    await run(installProbe);
+    await until(() => run(() => CACTestPdf.ready()),
       "Unsupported PDF interface: inspect both the plugin adapter and test harness before diagnosing compatibility.");
     assert.equal(await run((guid) => JSON.parse(AscDesktopEditor.GetInstallPlugins()).some((g) => (g.pluginsData || []).some((p) => p.guid === guid)), GUID), false,
       "CAC is already installed. Use a disposable profile.");
     const initial = await until(() => run(() => {
-      const fields = Asc.editor.jf.file.Mp.getInteractiveFormsInfo()?.Fields;
+      const fields = CACTestPdf.fields();
       return fields?.length ? fields.map((f) => ({ name: f.name, type: f.type, signed: !!f.Sig })) : null;
     }), "The installation fixture's signature field did not load.");
     assert.deepEqual(initial, [{ name: "InstallationTest", type: 33, signed: false }], "Open only the generated installation fixture.");
@@ -60,8 +62,8 @@ async function smoke(port, packagePath, version, fixtureName) {
         if (!Asc.editor.getUsedBackgroundPlugins().includes(guid)) Asc.editor.asc_pluginRun(guid, 0, "");
       }, GUID);
       await until(() => run(() => {
-        const fields = Asc.editor.jf.Qd().lC.filter((w) => w.type === 33);
-        return fields.length === 1 && fields.every((w) => String(w.Vh).includes("onClick(f.name)"));
+        const fields = CACTestPdf.widgets().filter((w) => w.type === 33);
+        return fields.length === 1 && fields.every((w) => String(CACTestPdf.click(w)).includes("onClick(f.name)"));
       }), "The background plugin did not finish preflight and attach its field handler.");
       progress("native preflight");
       const result = await run(async (guid) => {
@@ -77,14 +79,14 @@ async function smoke(port, packagePath, version, fixtureName) {
       progress("disable");
       await run((guid) => Asc.editor.asc_pluginStop(guid), GUID);
       await until(() => run((guid) => !document.getElementById("iframe_" + guid) &&
-        Asc.editor.jf.Qd().lC.every((w) => /^function\(\)\{\}$/.test(String(w.Vh).replace(/\s/g, ""))), GUID),
+        CACTestPdf.widgets().every((w) => /^function\(\)\{\}$/.test(String(CACTestPdf.click(w)).replace(/\s/g, ""))), GUID),
       "Disabling the plugin did not restore the field handler.");
       progress("uninstall");
       await run((guid) => AscDesktopEditor.PluginUninstall(guid, false), GUID);
       await until(() => run((guid) => !JSON.parse(AscDesktopEditor.GetInstallPlugins()).some((g) => (g.pluginsData || []).some((p) => p.guid === guid)) &&
         !PDFE.getController("Common.Controllers.Plugins").backgroundPlugins.some((p) => p.get("guid") === guid) &&
         !Asc.editor.getUsedBackgroundPlugins().includes(guid) &&
-        !document.getElementById("iframe_" + guid) && Asc.editor.jf.Qd().lC.every((w) => /^function\(\)\{\}$/.test(String(w.Vh).replace(/\s/g, ""))), GUID),
+        !document.getElementById("iframe_" + guid) && CACTestPdf.widgets().every((w) => /^function\(\)\{\}$/.test(String(CACTestPdf.click(w)).replace(/\s/g, ""))), GUID),
       "Uninstall did not remove the plugin and restore the field handler.");
       installed = false;
     }

@@ -6,6 +6,7 @@ const path = require("node:path");
 const { fileURLToPath } = require("node:url");
 const { connect, until } = require("./editor_cdp");
 
+const { installProbe } = require("./editor_interface");
 const GUID = "asc.{9A58C737-A6B4-4E31-8D3F-2C940B716EF9}";
 const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 
@@ -24,7 +25,7 @@ async function check(port, packagePath, sourcePath, replacementPath, statePath, 
     }), "The ONLYOFFICE form fixture did not load.");
     assert.equal(form.FormKey, "Signature1");
     assert.equal(form.FormValue, "");
-    assert.equal(await run(() => Asc.editor.GetVersion()), "9.4.0");
+    await run(installProbe);
     assert.equal(await run(() => Asc.editor.isDocumentModified()), false);
     assert.equal(await run(() => AscDesktopEditor.LocalFileGetSourcePath().replace(/\\/g, "/")), sourcePath.replace(/\\/g, "/"));
     assert.equal(await run((guid) => JSON.parse(AscDesktopEditor.GetInstallPlugins()).some((group) =>
@@ -86,7 +87,7 @@ async function check(port, packagePath, sourcePath, replacementPath, statePath, 
     });
     await until(() => run(() => Asc.editor.pluginMethod_IsFillingFormMode()), "The form did not enter Preview mode.");
     const recovery = await run(() => ({
-      directory: AscCommon.Ss.tia,
+      directory: CACTestPdf.directory(),
       name: Asc.editor.asc_getDocumentName(),
     }));
     assert.equal(recovery.name, sourceName);
@@ -95,7 +96,7 @@ async function check(port, packagePath, sourcePath, replacementPath, statePath, 
     const recoveryPath = fileURLToPath(new URL(sourceName, new URL(recovery.directory + "/")));
     const loadedHash = sha256(fs.readFileSync(recoveryPath));
     const loaded = await run(async () => {
-      const directory = new URL(AscCommon.Ss.tia + "/");
+      const directory = new URL(CACTestPdf.directory() + "/");
       const file = new URL(Asc.editor.asc_getDocumentName(), directory);
       const nativePath = decodeURIComponent(file.pathname).replace(/^\/([A-Za-z]:)/, "$1").replace(/\//g,
         navigator.platform.startsWith("Win") ? "\\" : "/");
@@ -133,7 +134,8 @@ async function check(port, packagePath, sourcePath, replacementPath, statePath, 
     review = await connect(port, (page) => {
       try { return new URL(page.url).searchParams.get("title") === path.basename(prepared); }
       catch (_) { return false; }
-    }, "typeof Asc !== 'undefined' && !!Asc.editor && !!Asc.editor.jf?.file?.Mp");
+    }, "typeof Asc !== 'undefined' && !!Asc.editor && typeof Asc.editor.asc_getPdfProps === 'function'");
+    await review.run(installProbe);
     const metadata = JSON.parse(fs.readFileSync(prepared.replace(/\.pdf$/, ".json"), "utf8"));
     assert.equal(metadata.field, "Signature1_af_image");
     assert.equal(metadata.sha256, sha256(fs.readFileSync(prepared)));
@@ -141,7 +143,7 @@ async function check(port, packagePath, sourcePath, replacementPath, statePath, 
     assert.equal(fs.readFileSync(prepared).includes(Buffer.from("/MetaOForm")), false);
 
     const visible = await until(() => review.run(() =>
-      Asc.editor.jf.file.Mp.getInteractiveFormsInfo()?.Fields?.filter((field) => field.type === 33)
+      CACTestPdf.fields()?.filter((field) => field.type === 33)
         .map((field) => ({ name: field.name, signed: !!field.Sig }))),
     "The review PDF did not expose a standard signature field.");
     assert.deepEqual(visible, [{ name: "Signature1_af_image", signed: false }]);

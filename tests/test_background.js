@@ -3,7 +3,9 @@ const vm = require("vm");
 const assert = require("assert/strict");
 const path = require("path");
 const root = path.resolve(__dirname, "..");
-function adapterTest() {
+function adapterTest(modern = false) {
+  const keys = modern ? { renderer: "Ve", doc: "md", reader: "Bp", widgets: "TD", appearance: "ZT", filled: "Ufb", click: "Ml" }
+    : { renderer: "jf", doc: "Qd", reader: "Mp", widgets: "lC", appearance: "u0", filled: "Cte", click: "Vh" };
   let timer,
     onModified,
     formReads = 0,
@@ -11,17 +13,17 @@ function adapterTest() {
     errors = [];
   const empty = {
     type: 33,
-    u0: () => 11,
-    Cte: () => false,
-    Vh: function () {},
+    [keys.appearance]: () => 11,
+    [keys.filled]: () => false,
+    [keys.click]: function () {},
   };
   const signed = {
     type: 33,
-    u0: () => 12,
-    Cte: () => true,
-    Vh: function () {},
+    [keys.appearance]: () => 12,
+    [keys.filled]: () => true,
+    [keys.click]: function () {},
   };
-  const original = empty.Vh;
+  const original = empty[keys.click];
   const widgets = [empty, signed];
   const fields = [
     { type: 33, AP: { i: 11 }, name: "PreparedBy", Sig: 0 },
@@ -30,7 +32,7 @@ function adapterTest() {
   const api = {
     // Exact editor fingerprint.
     asc_getPdfProps: vm.runInNewContext(
-      "(function(){return this.jf?this.jf.vWe():null})",
+      modern ? "(function(){return this.Ve?this.Ve.tMe():null})" : "(function(){return this.jf?this.jf.vWe():null})",
     ),
     isDocumentModified: () => false,
     asc_getDocumentName: () => "test.pdf",
@@ -39,10 +41,10 @@ function adapterTest() {
       onModified = fn;
     },
     asc_unregisterCallback() {},
-    jf: {
-      Qd: () => ({ lC: widgets }),
+    [keys.renderer]: {
+      [keys.doc]: () => ({ [keys.widgets]: widgets }),
       file: {
-        Mp: {
+        [keys.reader]: {
           getInteractiveFormsInfo: () => {
             formReads++;
             return { Fields: fields };
@@ -82,8 +84,8 @@ function adapterTest() {
     (e) => errors.push(e),
   );
   timer();
-  empty.Vh();
-  signed.Vh();
+  empty[keys.click]();
+  signed[keys.click]();
   assert.deepEqual(clicks, ["PreparedBy"]);
   assert.equal(errors.length, 0);
   assert.equal(
@@ -99,18 +101,18 @@ function adapterTest() {
   timer();
   timer();
   assert.equal(formReads, readsBeforeIdle);
-  const later = { type: 33, u0: () => 13, Cte: () => false, Vh: function () {} };
+  const later = { type: 33, [keys.appearance]: () => 13, [keys.filled]: () => false, [keys.click]: function () {} };
   widgets.push(later);
   fields.push({ type: 33, AP: { i: 13 }, name: "ApprovedBy", Sig: 0 });
   timer();
-  later.Vh();
+  later[keys.click]();
   assert.deepEqual(clicks, ["PreparedBy", "ApprovedBy"]);
   api.isDocumentModified = () => true;
   onModified();
   api.isDocumentModified = () => false;
   assert.throws(() => adapter.snapshot("PreparedBy"), /reopen the PDF/);
   adapter.detach();
-  assert.equal(empty.Vh, original);
+  assert.equal(empty[keys.click], original);
   api.asc_getPdfProps = () => null;
   assert.throws(() => context.window.CACDesktop(host), /adapter update/);
   api.GetVersion = () => "99.0.0";
@@ -119,7 +121,9 @@ function adapterTest() {
   assert.throws(() => context.window.CACDesktop(host), /ONLYOFFICE unknown needs/);
 }
 adapterTest();
+adapterTest(true);
 async function formAdapterTest(version) {
+  const urlKey = version.startsWith("10.") ? "Qq" : "Ss", directoryKey = version.startsWith("10.") ? "Xga" : "tia";
   const callbacks = {}, timers = [], clicks = [], errors = [], shown = [];
   const reads = [];
   const dialog = { show() { shown.push("native"); } };
@@ -138,7 +142,7 @@ async function formAdapterTest(version) {
   };
   const host = {
     Asc: { editor: api },
-    AscCommon: { Ss: { tia: "file:///C:/Test%20User%20%C3%A9%25/recover/DE_123" } },
+    AscCommon: { [urlKey]: { [directoryKey]: "file:///C:/Test%20User%20%C3%A9%25/recover/DE_123" } },
     AscDesktopEditor: {
       LocalFileGetSourcePath: () => sourcePath,
       loadLocalFile(path, callback) {
@@ -189,12 +193,12 @@ async function formAdapterTest(version) {
   for (const name of ["Form: 2026.pdf", "Form\\copy.pdf"]) {
     documentName = name;
     sourcePath = `/tmp/Test User é%/${name}`;
-    host.AscCommon.Ss.tia = "file:///tmp/Test%20User%20%C3%A9%25/recover/DE_123";
+    host.AscCommon[urlKey][directoryKey] = "file:///tmp/Test%20User%20%C3%A9%25/recover/DE_123";
     const next = await adapter.snapshot("Signature1");
     assert.equal(next.name, name);
     assert.equal(reads.at(-1), `/tmp/Test User é%/recover/DE_123/${name}`);
   }
-  host.AscCommon.Ss.tia = "file:///C:/Test%20User%20%C3%A9%25/recover/DE_123";
+  host.AscCommon[urlKey][directoryKey] = "file:///C:/Test%20User%20%C3%A9%25/recover/DE_123";
   sourcePath = snapshot.sourcePath;
   for (const name of ["Form: 2026.pdf", "Form\\copy.pdf"]) {
     documentName = name;
@@ -381,7 +385,7 @@ async function delayedFormStartupTest() {
   assert.deepEqual(events, ["preflight", "attach"]);
 }
 Promise.all([
-  formAdapterTest("9.4.0"), formAdapterTest("9.4.0.129"),
+  formAdapterTest("9.4.0"), formAdapterTest("9.4.0.129"), formAdapterTest("10.0.0"), formAdapterTest("10.0.0.169"),
   startupTest(false, false), startupTest(true, false), startupTest(false, true),
   startupTest(false, false, { editorType: "word", documentTitle: "form.pdf" }),
   startupTest(false, false, { editorType: "word", documentTitle: "standard.pdf" }, true),
