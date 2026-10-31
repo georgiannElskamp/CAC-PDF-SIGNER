@@ -23,8 +23,11 @@ class NativeManifestTests(unittest.TestCase):
             bundle.mkdir()
             (root / "fonts").mkdir()
             inputs = [root / "worker.py", root / "requirements-lock.txt",
-                      root / "requirements-linux.txt", root / "requirements-build.txt", root / "requirements-native-build.txt", root / "fonts/example.ttf"]
+                      root / "requirements-linux.txt", root / "requirements-build.txt", root / "requirements-native-build.txt", root / "fonts/example.ttf",
+                      root / "native_linux/runtime.json", root / "native_linux/build_middleware.sh",
+                      root / "native_windows/runtime.json", root / "tools/build_standalone.py"]
             for path in inputs:
+                path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(b"original")
             payload = bundle / "worker"
             payload.write_bytes(b"runtime")

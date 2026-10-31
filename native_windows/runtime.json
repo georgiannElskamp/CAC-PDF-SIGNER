@@ -1,0 +1,20 @@
+{
+  "architecture": "x86_64",
+  "python": {
+    "version": "3.11.18",
+    "opensslVersion": "3.5.9",
+    "distribution": "python-build-standalone 20261026 pgo",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261026/cpython-3.11.18%2B20261026-x86_64-pc-windows-msvc-install_only.tar.gz",
+    "sha256": "75cb501dc11c7b55c6b447c58e4910bce5b1f609f1017328b4f3a858dfaf5428",
+    "fullArchiveSha256": "1b65225a1da2ed64390189e7c187bea86a0e63286df9b4427e476f972420ff41"
+  },
+  "dlls": [
+    "python3.dll",
+    "python311.dll",
+    "vcruntime140.dll",
+    "vcruntime140_1.dll",
+    "DLLs/libcrypto-3-x64.dll",
+    "DLLs/libssl-3-x64.dll",
+    "DLLs/libffi-8.dll"
+  ]
+}

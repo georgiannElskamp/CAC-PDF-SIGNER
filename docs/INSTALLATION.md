@@ -6,7 +6,7 @@ Download **CAC-PDF-Signer.plugin** from the [latest approved release](https://gi
 
 | Component | Requirement |
 | --- | --- |
-| Editor | ONLYOFFICE Desktop Editors 9.4.0.129 or 10.0.0.169 |
+| Editor | ONLYOFFICE Desktop Editors 9.4.0.129 |
 | Windows | Windows 10 or later, x64; a working CNG or legacy CSP smart-card provider |
 | Linux | x86_64, glibc 2.28 or later, GTK 3, a desktop display, and reader access |
 | Card | Connected CAC with one eligible RSA document-signing certificate |
@@ -15,6 +15,8 @@ Download **CAC-PDF-Signer.plugin** from the [latest approved release](https://gi
 The Linux plugin includes OpenSC, PC/SC and a USB CCID driver. It reuses an available system PC/SC service, or starts its own reader process for the signing operation. It does not install a service, elevate privileges or change USB permissions. WSL requires the reader to be attached to Linux.
 
 ARM64, musl-based Linux, macOS, the web editor, Flatpak and Snap are outside this package's supported scope. RPM and AppImage installation are untested. Windows application-control policies may block the unsigned worker. See the [validation matrix](TESTING.md) for tested configurations and outstanding hardware checks.
+
+**ONLYOFFICE 10.0.0.169 is unsupported.** It restricts the native process API needed by this standalone plugin. Signing cannot be enabled by changing the field adapter alone. See [the compatibility investigation](TESTING.md#onlyoffice-10-native-process-restriction).
 
 ## Install or update
 

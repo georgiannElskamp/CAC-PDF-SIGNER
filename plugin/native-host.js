@@ -153,13 +153,13 @@
         }
       };
       process.start();
-      if (process.id < 0)
+      if (!Number.isInteger(process.id) || process.id < 0)
         throw new Error(
           "ONLYOFFICE could not start the bundled CAC component.",
         );
     } catch (error) {
       finish({ ok: false, error: error.message || String(error) });
-      if (process && process.id >= 0) process.end();
+      if (process && Number.isInteger(process.id) && process.id >= 0) process.end();
       active = null;
     }
   }

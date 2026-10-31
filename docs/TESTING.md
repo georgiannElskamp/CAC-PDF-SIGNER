@@ -21,7 +21,7 @@ For a built package, run `python -B tools/verify_package.py <path-to-CAC-PDF-Sig
 
 ## Hosted qualification
 
-`tests/editor_ci.py` installs checksum-pinned official ONLYOFFICE Desktop Editors on disposable Windows and Ubuntu GitHub runners. Candidate qualification tests 9.4.0.129 and 10.0.0.169 independently on both systems, plus simulated signing on each version. The approved compatibility control remains 9.4.0.129. It checks the packaged plugin's Background plugins listing, native preflight, disable, uninstall and reinstall. Candidate builds require a second editor session that opens the synthetic PDF form in Preview mode, clicks its signature box, and produces an unsigned review PDF with a visible standard signature field. A PDF parser compares the review copy's page content and field rectangle to the editor-loaded snapshot. The test uses paths with spaces and an accented character. Where the open source file can be replaced, the check also verifies that the handoff uses the loaded snapshot rather than the changed disk file. Compatibility runs require this form check for releases 0.9.0 and later; earlier releases are checked against their supported standard-PDF workflow.
+`tests/editor_ci.py` installs checksum-pinned official ONLYOFFICE Desktop Editors on disposable Windows and Ubuntu GitHub runners. Candidate signing qualification and the approved compatibility control use 9.4.0.129. Separate Windows/Linux tests on 10.0.0.169 verify the unsupported-version message, unchanged signature handlers and absence of a native worker client; they do not qualify signing support. It checks the packaged plugin's Background plugins listing, native preflight, disable, uninstall and reinstall. Candidate builds require a second editor session that opens the synthetic PDF form in Preview mode, clicks its signature box, and produces an unsigned review PDF with a visible standard signature field. A PDF parser compares the review copy's page content and field rectangle to the editor-loaded snapshot. The test uses paths with spaces and an accented character. Where the open source file can be replaced, the check also verifies that the handoff uses the loaded snapshot rather than the changed disk file. Compatibility runs require this form check for releases 0.9.0 and later; earlier releases are checked against their supported standard-PDF workflow.
 
 Other required jobs exercise Linux GUI signing with a software token, native PIN entry, Save As cancellation/recovery, a fresh editor restart and independent PDF verification. Windows CNG qualification uses a disposable software certificate and the bundled bridge. Neither simulation proves physical CAC, reader, driver or provider compatibility. Windows standard-user profile initialization remains a diagnostic limit outside the required matrix.
 
@@ -35,7 +35,7 @@ The source tests passed on Windows: 94 tests, with five Linux-only skips; both J
 
 | Component | Covered scope |
 | --- | --- |
-| ONLYOFFICE | Desktop Editors 9.4.0.129 and 10.0.0.169 interface mappings; other versions require adapter validation |
+| ONLYOFFICE | Desktop Editors 9.4.0.129; 10.0.0.169 is blocked by its native-process permission boundary |
 | Windows | Windows 10 or later, x64, CNG or legacy CSP card provider; unsigned worker may be blocked by application policy |
 | Linux | x86_64, glibc 2.28+, GTK 3, desktop display and reader access |
 | Form source | Saved and reopened PDF form, one unambiguous empty signature box, Preview mode, no existing PDF signature |
@@ -44,3 +44,11 @@ The source tests passed on Windows: 94 tests, with five Linux-only skips; both J
 ARM64, musl-based Linux, macOS, browser editing, Flatpak, Snap, network installations and every PDF layout are outside the validated package. RPM and AppImage installation remain untested. The Linux software-token test does not cover physical card readers. A working editor does not establish permission to execute the worker or access a reader.
 
 For a physical-card release check, install the candidate through Plugin Manager, sign a standard PDF field and an ONLYOFFICE form review copy, save and reopen each PDF, inspect the visible text and validate the signature in an independent PDF verifier. Retry Save As after cancellation and repeat on another Windows profile with spaces when possible. Keep test documents, certificate details and PINs out of issues and artifacts.
+
+## ONLYOFFICE 10 native process restriction
+
+The October 31 candidate probe failed native startup on Windows and Linux 10.0.0.169, while the same package passed 9.4.0.129. The Linux failure screenshot shows the worker startup timeout. [Hosted evidence](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/actions/runs/41244591431).
+
+The exact Desktop SDK tag `v10.0.0.169` resolves to `a75c35326aad475a5a4ec904baa9a5d518bcc162`. Its [plugin permission policy](https://github.com/ONLYOFFICE/desktop-sdk/blob/a75c35326aad475a5a4ec904baa9a5d518bcc162/ChromiumBasedEditors/lib/src/plugin_permissions.h) restricts `_createProcess`, `_endProcess` and `_stdin` to the designated built-in plugin and entry pages. The CAC plugin does not qualify. New PDF field mappings alone cannot restore signing.
+
+The candidate reports this limitation before native startup. Issue [#39](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/issues/39) tracks an approved integration path. Passing the rejection tests must not be described as support for signing in 10.0.

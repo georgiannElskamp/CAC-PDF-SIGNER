@@ -11,6 +11,10 @@ def source_hashes(root):
     files = list(root.glob("*.py"))
     files += [root / name for name in ("requirements-lock.txt", "requirements-linux.txt", "requirements-build.txt", "requirements-native-build.txt")]
     files += [p for p in (root / "fonts").rglob("*") if p.is_file()]
+    for directory in ("native_linux", "native_windows"):
+        files += [p for p in (root / directory).rglob("*") if p.is_file() and "__pycache__" not in p.parts]
+    files += [root / "tools" / name for name in ("build_standalone.py", "build_linux.py", "bundle_manifest.py")
+              if (root / "tools" / name).is_file()]
     result = {}
     for path in sorted(files):
         data = path.read_bytes()

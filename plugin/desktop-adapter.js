@@ -1,37 +1,33 @@
-/* ONLYOFFICE Desktop PDF adapters; fingerprints bind private interfaces to tested builds. */
+/* ONLYOFFICE Desktop 9.4.0 PDF adapter. */
 window.CACDesktop = function (host) {
   "use strict";
   const api = host.Asc && host.Asc.editor;
   const native = host.AscDesktopEditor;
-  const profiles = [
-    { versions: ["9.4.0", "9.4.0.129"], fingerprint: "function(){returnthis.jf?this.jf.vWe():null}",
-      renderer: "jf", document: "Qd", reader: "Mp", widgets: "lC", appearance: "u0",
-      filled: "Cte", click: "Vh", urls: "Ss", directory: "tia" },
-    { versions: ["10.0.0", "10.0.0.169"], fingerprint: "function(){returnthis.Ve?this.Ve.tMe():null}",
-      renderer: "Ve", document: "md", reader: "Bp", widgets: "TD", appearance: "ZT",
-      filled: "Ufb", click: "Ml", urls: "Qq", directory: "Xga" },
-  ];
+  const fingerprint = "function(){return this.jf?this.jf.vWe():null}";
   let version = "unknown";
   try {
     if (api && typeof api.GetVersion === "function") version = api.GetVersion();
   } catch (_) {}
-  const signature = api && typeof api.asc_getPdfProps === "function" &&
-    String(api.asc_getPdfProps).replace(/\s/g, "");
-  const pdfProfile = profiles.find((p) => p.fingerprint === signature);
-  const profile = pdfProfile || profiles.find((p) => p.versions.includes(version));
-  const pdfMode = !!pdfProfile;
+  if (/^10\.0\.0(?:\.|$)/.test(version)) {
+    throw new Error(
+      "ONLYOFFICE " + version + " restricts the native process API required by CAC PDF Signer. " +
+      "Signing is unavailable in this editor version. No CAC was accessed or document signed.",
+    );
+  }
+  const pdfMode = api && typeof api.asc_getPdfProps === "function" &&
+    String(api.asc_getPdfProps).replace(/\s/g, "") === fingerprint.replace(/\s/g, "");
   const formMode = api && typeof api.asc_getPdfProps === "function" &&
     String(api.asc_getPdfProps).replace(/\s/g, "") === "function(){returnnull}" &&
     typeof api.pluginMethod_GetAllForms === "function" &&
     typeof api.pluginMethod_IsFillingFormMode === "function" &&
-    profile && profile.versions.includes(version) &&
-    typeof host.AscCommon?.[profile.urls]?.[profile.directory] === "string" &&
+    (version === "9.4.0" || version === "9.4.0.129") &&
+    typeof host.AscCommon?.Ss?.tia === "string" &&
     typeof native?.loadLocalFile === "function" &&
     host.Common && host.Common.Views && host.Common.Views.PdfSignDialog &&
     typeof host.Common.Views.PdfSignDialog.prototype.show === "function";
   if (!api || !native || (!pdfMode && !formMode)) {
     throw new Error(
-      "ONLYOFFICE " + version + " needs a CAC adapter update. Supported interfaces: Desktop Editors 9.4.0.129 and 10.0.0.169. No document was signed.",
+      "ONLYOFFICE " + version + " needs a CAC adapter update. This plugin was tested with Desktop Editors 9.4.0.129. No document was signed.",
     );
   }
   const hooked = new Map();
@@ -65,7 +61,7 @@ window.CACDesktop = function (host) {
         throw new Error("This ONLYOFFICE signature box is filled or ambiguous.");
       return {
         sourcePath: sourcePath(),
-        directory: host.AscCommon[profile.urls][profile.directory],
+        directory: host.AscCommon.Ss.tia,
         name: api.asc_getDocumentName(),
         id: String(matches[0].InternalId),
       };
@@ -197,14 +193,14 @@ window.CACDesktop = function (host) {
     return { snapshot, attach, detach, stillCurrent };
   }
   function renderer() {
-    const r = api[profile.renderer];
+    const r = api.jf;
     if (
       !r ||
-      typeof r[profile.document] !== "function" ||
+      typeof r.Qd !== "function" ||
       !r.file ||
-      !r.file[profile.reader] ||
-      typeof r.file[profile.reader].getInteractiveFormsInfo !== "function" ||
-      typeof r.file[profile.reader].getFileBinary !== "function"
+      !r.file.Mp ||
+      typeof r.file.Mp.getInteractiveFormsInfo !== "function" ||
+      typeof r.file.Mp.getFileBinary !== "function"
     )
       throw new Error("Wait for the PDF to finish opening.");
     return r;
@@ -215,14 +211,14 @@ window.CACDesktop = function (host) {
         "Save your PDF edits and reopen the PDF, then click the signature box. ONLYOFFICE keeps the original PDF in memory until it is reopened.",
       );
     const r = renderer();
-    const matches = (r.file[profile.reader].getInteractiveFormsInfo().Fields || []).filter(
+    const matches = (r.file.Mp.getInteractiveFormsInfo().Fields || []).filter(
       (f) => f.type === 33 && f.name === field && !f.Sig,
     );
     if (matches.length !== 1)
       throw new Error(
         "This signature field is already signed or is ambiguous.",
       );
-    const bytes = new Uint8Array(r.file[profile.reader].getFileBinary());
+    const bytes = new Uint8Array(r.file.Mp.getFileBinary());
     if (
       bytes.length > 40 * 1024 * 1024 ||
       String.fromCharCode(...bytes.slice(0, 5)) !== "%PDF-"
@@ -238,37 +234,37 @@ window.CACDesktop = function (host) {
     function scan() {
       try {
         const r = renderer(),
-          doc = r[profile.document]();
-        if (!Array.isArray(doc[profile.widgets]))
+          doc = r.Qd();
+        if (!Array.isArray(doc.lC))
           throw new Error(
             "PDF signature fields are not supported by this ONLYOFFICE build.",
           );
-        const pending = doc[profile.widgets].filter((w) => w.type === 33 && !hooked.has(w));
+        const pending = doc.lC.filter((w) => w.type === 33 && !hooked.has(w));
         if (!pending.length) return;
-        const forms = r.file[profile.reader].getInteractiveFormsInfo().Fields || [];
+        const forms = r.file.Mp.getInteractiveFormsInfo().Fields || [];
         for (const w of pending) {
-          if (typeof w[profile.appearance] !== "function") continue;
-          const appearance = w[profile.appearance]();
+          if (typeof w.u0 !== "function") continue;
+          const appearance = w.u0();
           const f = forms.find(
             (f) => f.AP && f.AP.i === appearance,
           );
           if (!f || f.type !== 33 || f.Sig || f.display === 1 || !f.name)
             continue;
           if (
-            typeof w[profile.filled] !== "function" ||
-            typeof w[profile.click] !== "function" ||
-            !/^function\(\)\{\}$/.test(String(w[profile.click]).replace(/\s/g, ""))
+            typeof w.Cte !== "function" ||
+            typeof w.Vh !== "function" ||
+            !/^function\(\)\{\}$/.test(String(w.Vh).replace(/\s/g, ""))
           ) {
             throw new Error(
               "The PDF click interface changed. The CAC adapter needs an update.",
             );
           }
-          const original = w[profile.click];
+          const original = w.Vh;
           const handler = function () {
             original.apply(this, arguments);
-            if (!w[profile.filled]()) onClick(f.name);
+            if (!w.Cte()) onClick(f.name);
           };
-          w[profile.click] = handler;
+          w.Vh = handler;
           hooked.set(w, { original, handler });
         }
       } catch (e) {
@@ -281,7 +277,7 @@ window.CACDesktop = function (host) {
   function detach() {
     clearInterval(timer);
     api.asc_unregisterCallback("asc_onDocumentModifiedChanged", onModified);
-    for (const [w, h] of hooked) if (w[profile.click] === h.handler) w[profile.click] = h.original;
+    for (const [w, h] of hooked) if (w.Vh === h.handler) w.Vh = h.original;
     hooked.clear();
   }
   return { snapshot, attach, detach };

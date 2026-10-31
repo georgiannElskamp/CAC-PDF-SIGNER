@@ -42,9 +42,22 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.11.9'
+      - name: Prepare pinned Windows Python
+        shell: pwsh
+        run: |
+          $pin = (Get-Content native_windows/runtime.json -Raw | ConvertFrom-Json).python
+          $archive = Join-Path $env:RUNNER_TEMP 'python-runtime.tar.gz'
+          $runtime = Join-Path $env:RUNNER_TEMP 'python-runtime'
+          Invoke-WebRequest -Uri $pin.url -OutFile $archive
+          if ((Get-FileHash $archive -Algorithm SHA256).Hash.ToLowerInvariant() -ne $pin.sha256) {
+            throw 'Python runtime checksum mismatch'
+          }
+          New-Item -ItemType Directory -Path $runtime | Out-Null
+          tar -xf $archive -C $runtime
+          if ($LASTEXITCODE -ne 0) { throw 'Python runtime extraction failed' }
+          & "$runtime/python/python.exe" -m venv "$runtime/venv"
+          if ($LASTEXITCODE -ne 0) { throw 'Python build environment setup failed' }
+          "$runtime/venv/Scripts" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: linux-worker
