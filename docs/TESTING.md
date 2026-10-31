@@ -21,7 +21,7 @@ For a built package, run `python -B tools/verify_package.py <path-to-CAC-PDF-Sig
 
 ## Hosted qualification
 
-`tests/editor_ci.py` installs the pinned official ONLYOFFICE Desktop Editors 9.4.0.129 on disposable Windows and Ubuntu GitHub runners. It checks the packaged plugin's Background plugins listing, native preflight, disable, uninstall and reinstall. Candidate builds require a second editor session that opens the synthetic PDF form in Preview mode, clicks its signature box, and produces an unsigned review PDF with a visible standard signature field. A PDF parser compares the review copy's page content and field rectangle to the editor-loaded snapshot. The test uses paths with spaces and an accented character. Where the open source file can be replaced, the check also verifies that the handoff uses the loaded snapshot rather than the changed disk file. Compatibility runs require this form check for releases 0.9.0 and later; earlier releases are checked against their supported standard-PDF workflow.
+`tests/editor_ci.py` installs checksum-pinned official ONLYOFFICE Desktop Editors on disposable Windows and Ubuntu GitHub runners. Candidate qualification tests 9.4.0.129 and 10.0.0.169 independently on both systems, plus simulated signing on each version. The approved compatibility control remains 9.4.0.129. It checks the packaged plugin's Background plugins listing, native preflight, disable, uninstall and reinstall. Candidate builds require a second editor session that opens the synthetic PDF form in Preview mode, clicks its signature box, and produces an unsigned review PDF with a visible standard signature field. A PDF parser compares the review copy's page content and field rectangle to the editor-loaded snapshot. The test uses paths with spaces and an accented character. Where the open source file can be replaced, the check also verifies that the handoff uses the loaded snapshot rather than the changed disk file. Compatibility runs require this form check for releases 0.9.0 and later; earlier releases are checked against their supported standard-PDF workflow.
 
 Other required jobs exercise Linux GUI signing with a software token, native PIN entry, Save As cancellation/recovery, a fresh editor restart and independent PDF verification. Windows CNG qualification uses a disposable software certificate and the bundled bridge. Neither simulation proves physical CAC, reader, driver or provider compatibility. Windows standard-user profile initialization remains a diagnostic limit outside the required matrix.
 
@@ -35,7 +35,7 @@ The source tests passed on Windows: 94 tests, with five Linux-only skips; both J
 
 | Component | Covered scope |
 | --- | --- |
-| ONLYOFFICE | Desktop Editors 9.4.0.129 internals; other versions require adapter validation |
+| ONLYOFFICE | Desktop Editors 9.4.0.129 and 10.0.0.169 interface mappings; other versions require adapter validation |
 | Windows | Windows 10 or later, x64, CNG or legacy CSP card provider; unsigned worker may be blocked by application policy |
 | Linux | x86_64, glibc 2.28+, GTK 3, desktop display and reader access |
 | Form source | Saved and reopened PDF form, one unambiguous empty signature box, Preview mode, no existing PDF signature |

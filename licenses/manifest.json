@@ -133,7 +133,7 @@
     {
       "file": "linux-pcsc-lite-LICENSE.txt",
       "sha256": "7dffe53fb02dd12a3518335d9c948484ee91ca098f1fac2ee9f9af639bbde7c9",
-      "source": "https://pcsclite.apdu.fr/files/pcsc-lite-2.5.2.tar.xz"
+      "source": "https://pcsclite.apdu.fr/files/pcsc-lite-2.5.3.tar.xz"
     },
     {
       "file": "linux-ccid-LICENSE.txt",
@@ -158,7 +158,7 @@
     {
       "file": "linux-openssl-LICENSE.txt",
       "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a",
-      "source": "https://github.com/openssl/openssl/releases/download/openssl-3.5.8/openssl-3.5.8.tar.gz"
+      "source": "https://github.com/openssl/openssl/releases/download/openssl-3.5.9/openssl-3.5.9.tar.gz"
     },
     {
       "file": "linux-gcc-runtime-COPYRIGHT.txt",

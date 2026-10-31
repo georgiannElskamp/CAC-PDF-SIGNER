@@ -15,11 +15,11 @@ ONLYOFFICE PDF form signature boxes export as image buttons rather than PDF `/Si
 
 The first click makes no card request. The worker copies the standard PDF objects, converts each empty signature button into a `/Sig` field while retaining its appearance, and stores a separate unsigned `CAC-review` PDF with a hash-bound handoff record under the user's `Prepared` directory. The plugin opens that PDF in ordinary PDF mode. After the user reviews it, the second click sends the review PDF's in-memory bytes to the worker for PIN entry, signing, verification and Save As. The worker rejects a changed or missing handoff and will not overwrite either the original form or review copy. The signed copy does not retain the editable form package. Existing signed forms are rejected because copying them would invalidate their signatures.
 
-The form adapter is pinned to Desktop Editors 9.4.0.129 internals. Its recovery snapshot is the PDF that ONLYOFFICE loaded, which may differ from a file subsequently changed on disk. The hosted form test clicks a real signature box and checks that the review PDF retains the loaded page content. It also tries to replace the source after load; the local Windows editor locked that file, so the Linux runner provides the replacement check.
+The form adapter is pinned to separate Desktop Editors 9.4.0.129 and 10.0.0.169 interface mappings. Its recovery snapshot is the PDF that ONLYOFFICE loaded, which may differ from a file subsequently changed on disk. The hosted form test clicks a real signature box and checks that the review PDF retains the loaded page content. It also tries to replace the source after load; the local Windows editor locked that file, so the Linux runner provides the replacement check.
 
 ## Platform integration
 
-The PDF-field adapter and process interface depend on ONLYOFFICE internals and are validated against Desktop Editors 9.4.0.129. An incompatible adapter fails before signing. PDF documents can report `editorType: word` with `editorSubType: pdf`; the manifest and startup guard account for both.
+The PDF-field adapter and process interface depend on ONLYOFFICE internals and are qualified against Desktop Editors 9.4.0.129 and 10.0.0.169. An incompatible adapter fails before signing. PDF documents can report `editorType: word` with `editorSubType: pdf`; the manifest and startup guard account for both.
 
 This editor version splits Windows executable paths at the first space. The launcher uses the built-in `cmd.exe` with tab-separated arguments, quoted paths, and disabled AutoRun and delayed expansion. Existing short-name aliases reduce executable and temporary paths when available. The editor's own loader still limits long plugin paths.
 

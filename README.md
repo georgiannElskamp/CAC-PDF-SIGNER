@@ -2,7 +2,7 @@
 
 Sign PDF signature fields and ONLYOFFICE form signature boxes with a Common Access Card in ONLYOFFICE Desktop Editors. The background plugin fills the signature block with certificate details, scales the text to fit, and opens Save As.
 
-**[Download the approved release](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/releases/latest)** · [Installation](docs/INSTALLATION.md) · [Validation status](docs/TESTING.md)
+**[Download the approved release](https://github.com/georgiannElskamp/CAC-PDF-SIGNER/releases/latest)** Â· [Installation](docs/INSTALLATION.md) Â· [Validation status](docs/TESTING.md)
 
 The maintainer has reported physical CAC signing on Windows installations. Linux signing has been tested with a simulated card; physical CAC signing on Linux remains unverified. Each release links its automated evidence and requires maintainer approval.
 
@@ -10,7 +10,7 @@ The maintainer has reported physical CAC signing on Windows installations. Linux
 
 | Platform | Requirements |
 | --- | --- |
-| Editor | ONLYOFFICE Desktop Editors 9.4.0.129 |
+| Editor | ONLYOFFICE Desktop Editors 9.4.0.129 or 10.0.0.169 |
 | Windows | Windows 10 or later, x64, working CNG or legacy CSP smart-card provider |
 | Linux | x86_64, glibc 2.28+, GTK 3, desktop display and permission to access the reader |
 

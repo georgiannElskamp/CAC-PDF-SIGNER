@@ -6,7 +6,7 @@ Download **CAC-PDF-Signer.plugin** from the [latest approved release](https://gi
 
 | Component | Requirement |
 | --- | --- |
-| Editor | ONLYOFFICE Desktop Editors 9.4.0.129 |
+| Editor | ONLYOFFICE Desktop Editors 9.4.0.129 or 10.0.0.169 |
 | Windows | Windows 10 or later, x64; a working CNG or legacy CSP smart-card provider |
 | Linux | x86_64, glibc 2.28 or later, GTK 3, a desktop display, and reader access |
 | Card | Connected CAC with one eligible RSA document-signing certificate |
@@ -72,3 +72,5 @@ Verification checks signature integrity. Certificate trust, revocation and trust
 ## Uninstall
 
 Disable **CAC PDF Signer** under **Background plugins**, then remove it in Plugin Manager and close the PDF. Removing plugin files alone can leave a running instance active until the document closes.
+
+ONLYOFFICE must launch before the plugin can run. On minimal Debian/Ubuntu installations, ONLYOFFICE 10 may need the `libxcb-shape0` display package even though its installer does not declare it. This is an editor startup dependency; the CAC worker still carries its own signing middleware.
