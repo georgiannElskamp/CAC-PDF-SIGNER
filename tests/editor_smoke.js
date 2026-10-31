@@ -62,7 +62,7 @@ async function smoke(port, packagePath, version, fixtureName, expectUnsupported)
         if (!Asc.editor.getUsedBackgroundPlugins().includes(guid)) Asc.editor.asc_pluginRun(guid, 0, "");
       }, GUID);
       if (expectUnsupported) {
-        await until(() => run(() => Array.from(document.querySelectorAll(".modal-dlg")).some(
+        await until(() => run(() => Array.from(document.querySelectorAll(".asc-window.modal")).some(
           (n) => n.textContent.includes("restricts the native process API") &&
                  n.textContent.includes("No CAC was accessed or document signed"))),
         "The unsupported editor did not show the expected compatibility message.", 10000);
@@ -70,26 +70,26 @@ async function smoke(port, packagePath, version, fixtureName, expectUnsupported)
           "The unsupported editor must not create a native worker client.");
         assert.equal(await run(() => CACTestPdf.widgets().every((w) => /^function\(\)\{\}$/.test(String(CACTestPdf.click(w)).replace(/\s/g, "")))), true,
           "The unsupported editor must leave signature handlers untouched.");
-        await run(() => Array.from(document.querySelectorAll(".modal-dlg button, .modal-dlg .btn")).find(
+        await run(() => Array.from(document.querySelectorAll(".asc-window.modal button, .asc-window.modal .btn")).find(
           (n) => n.textContent.trim() === "OK")?.click());
-        await until(() => run(() => !Array.from(document.querySelectorAll(".modal-dlg")).some(
+        await until(() => run(() => !Array.from(document.querySelectorAll(".asc-window.modal")).some(
           (n) => n.textContent.includes("restricts the native process API"))), "The compatibility dialog could not be dismissed.", 10000);
       } else {
-      await until(() => run(() => {
-        const fields = CACTestPdf.widgets().filter((w) => w.type === 33);
-        return fields.length === 1 && fields.every((w) => String(CACTestPdf.click(w)).includes("onClick(f.name)"));
-      }), "The background plugin did not finish preflight and attach its field handler.");
-      progress("native preflight");
-      const result = await run(async (guid) => {
-        const frame = document.getElementById("iframe_" + guid);
-        const client = frame.contentWindow.CACNativeClient();
-        try { return await client.call({ op: "preflight" }); } finally { client.close(); }
-      }, GUID);
-      assert.equal(result.ok, true);
-      assert.equal(result.version, version);
-      assert.equal(result.desktopReady, true);
-      assert.equal(result.recoveryWritable, true);
-      assert.equal(result.cardChecked, false);
+        await until(() => run(() => {
+          const fields = CACTestPdf.widgets().filter((w) => w.type === 33);
+          return fields.length === 1 && fields.every((w) => String(CACTestPdf.click(w)).includes("onClick(f.name)"));
+        }), "The background plugin did not finish preflight and attach its field handler.");
+        progress("native preflight");
+        const result = await run(async (guid) => {
+          const frame = document.getElementById("iframe_" + guid);
+          const client = frame.contentWindow.CACNativeClient();
+          try { return await client.call({ op: "preflight" }); } finally { client.close(); }
+        }, GUID);
+        assert.equal(result.ok, true);
+        assert.equal(result.version, version);
+        assert.equal(result.desktopReady, true);
+        assert.equal(result.recoveryWritable, true);
+        assert.equal(result.cardChecked, false);
       }
       progress("disable");
       await run((guid) => Asc.editor.asc_pluginStop(guid), GUID);
@@ -114,8 +114,9 @@ async function smoke(port, packagePath, version, fixtureName, expectUnsupported)
       return {
         version: Asc.editor.GetVersion(),
         fingerprint: String(Asc.editor.asc_getPdfProps),
-        pluginInfo: frame?.contentWindow?.Asc?.plugin?.info,
-        dialogs: Array.from(document.querySelectorAll(".modal-dlg")).map((n) => n.textContent.slice(0, 2000)),
+        editorType: frame?.contentWindow?.Asc?.plugin?.info?.editorType,
+        editorSubType: frame?.contentWindow?.Asc?.plugin?.info?.editorSubType,
+        dialogs: Array.from(document.querySelectorAll(".asc-window.modal")).map((n) => n.textContent.slice(0, 2000)),
         fields: window.CACTestPdf?.fields(),
         widgets: window.CACTestPdf?.widgets()?.map((w) => ({
           type: w.type, click: String(CACTestPdf.click(w)),
