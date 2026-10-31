@@ -150,7 +150,9 @@ def check(package, manifest=None, plugin_version=None, form_handoff=False):
             subprocess.run([str(installer), "/VERYSILENT", "/SP-", "/SUPPRESSMSGBOXES", "/NORESTART", "/TASKS="], check=True, timeout=300)
             editor = Path(os.environ["ProgramFiles"]) / "ONLYOFFICE/DesktopEditors/DesktopEditors.exe"
         else:
-            subprocess.run(["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", str(installer)], check=True, timeout=300)
+            # A failed newer-editor probe is followed by the pinned control on this disposable runner.
+            subprocess.run(["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y",
+                            "--allow-downgrades", "libxcb-shape0", str(installer)], check=True, timeout=300)
             launcher = shutil.which("onlyoffice-desktopeditors") or shutil.which("desktopeditors")
             if not launcher:
                 raise RuntimeError("The official ONLYOFFICE launcher was not installed.")

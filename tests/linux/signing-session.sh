@@ -24,5 +24,8 @@ launcher=$(command -v onlyoffice-desktopeditors || command -v desktopeditors)
 editor_pid=$!
 status=0
 node tests/linux/signing.js || status=$?
-if [[ "$status" != 0 ]]; then python3 -B tests/linux/capture_screen.py /evidence/ui-failure.png || true; fi
+if [[ "$status" != 0 ]]; then
+    cp /test/state/editor.log /evidence/editor-failure.log
+    python3 -B tests/linux/capture_screen.py /evidence/ui-failure.png || true
+fi
 exit "$status"

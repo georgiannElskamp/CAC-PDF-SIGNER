@@ -134,7 +134,11 @@ async function main() {
     report.recoveryHash=signedHash;
     assert.equal(metadata.sha256,signedHash);
     console.log("Signature created; cancelling Save As");
-    key(save,"Escape");
+    // The mapped GTK window may precede its keyboard event handler.
+    for (let attempt = 0; attempt < 3 && windows("Save signed PDF as").includes(save); attempt++) {
+      key(save,"Escape");
+      await delay(500);
+    }
     await until(()=>!windows("Save signed PDF as").length,"Save As did not cancel");
     await delay(1500);
     assert(!fs.existsSync(output));
