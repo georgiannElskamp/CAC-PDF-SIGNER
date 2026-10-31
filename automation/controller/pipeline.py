@@ -491,7 +491,15 @@ def main():
     if not maintenance.scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME")):
         print("Outside the monthly maintenance window")
         return
-    if api("/user", credential="CODEX_TRIGGER_TOKEN")["login"] != OWNER:
+    try:
+        identity = api("/user", credential="CODEX_TRIGGER_TOKEN")
+    except urllib.error.HTTPError as error:
+        if error.code not in {401, 403}:
+            raise
+        raise SystemExit("CODEX_TRIGGER_TOKEN was rejected by GitHub (HTTP " + str(error.code)
+                         + "). Renew the linked owner's token in the private repository's Actions secrets; "
+                         "grant Pull requests read/write on CAC-PDF-SIGNER. No PRs were processed.") from None
+    if identity["login"] != OWNER:
         raise SystemExit("Codex trigger identity changed")
     state = State()
     full_pass = not args.pull and not args.pr_only

@@ -10,7 +10,7 @@ Unicode signature appearances use Noto Sans and Noto Sans CJK under the SIL Open
 
 - Distribution: https://onlyoffice.github.io/sdkjs-plugins/v1/plugins.js
 - Source: https://github.com/ONLYOFFICE/sdkjs/tree/master/common/plugins
-- SHA-256: `8b3cff57a562b56610116252f021042410b568cbfdfabb22c3abb35c38c78cdf`
+- SHA-256: `1bc0bd71eebcb477ceaaee3ab00ed1a10ce7eae117ec68ae8024645c435f524e`
 
 The CAC icons are project assets. The project name indicates ONLYOFFICE compatibility and does not imply endorsement.
 
@@ -41,42 +41,42 @@ The bridge contains the Go 1.26.4 runtime and `golang.org/x/sys` v0.46.0, copyri
 
 `requirements-lock.txt` pins the production dependencies, including pyHanko, cryptography, asn1crypto, pyhanko-certvalidator and Pillow. ReportLab is used for tests. Dependency licenses are included in release archives under `licenses/dependencies`.
 
-PyInstaller 6.22.3 packages CPython 3.11.9 and the dependencies. The archive includes PyInstaller's GPL license and bootloader exception, the CPython license, and setuptools notices. Integration source is included under `source/`.
+PyInstaller 6.22.3 packages CPython 3.11.18 and the dependencies. The archive includes PyInstaller's GPL license and bootloader exception, the CPython license, and setuptools notices. Integration source is included under `source/`.
 
 - PyInstaller source: https://github.com/pyinstaller/pyinstaller/tree/v6.22.3
-- CPython source: https://github.com/python/cpython/tree/v3.11.9
+- CPython source: https://github.com/python/cpython/tree/v3.11.18
 - Python packages: https://pypi.org/
 
 ## OpenSSL
 
-The CPython runtime includes OpenSSL 3.0.13 in `libcrypto-3.dll` and `libssl-3.dll`. The cryptography 50.0.1 Windows wheel includes OpenSSL 4.0.2. OpenSSL is developed by the OpenSSL Project and distributed under Apache-2.0; the license copies are in `licenses/openssl-3.0.13-APACHE-2.0.txt` and `licenses/openssl-4.0.2-APACHE-2.0.txt`.
+The pinned CPython runtimes include OpenSSL 3.5.9. The Windows DLLs are `libcrypto-3-x64.dll` and `libssl-3-x64.dll`. The cryptography 50.0.2 Windows wheel includes OpenSSL 4.0.3. OpenSSL is developed by the OpenSSL Project and distributed under Apache-2.0; the license copies are in `licenses/linux-python-LICENSE.openssl-3.txt` and `licenses/openssl-4.0.3-APACHE-2.0.txt`.
 
-- OpenSSL 3.0.13 source: https://github.com/openssl/openssl/tree/openssl-3.0.13
-- OpenSSL 4.0.2 source: https://github.com/openssl/openssl/tree/openssl-4.0.2
+- OpenSSL 3.5.9 source: https://github.com/openssl/openssl/tree/openssl-3.5.9
+- OpenSSL 4.0.3 source: https://github.com/openssl/openssl/tree/openssl-4.0.3
 
 ## Microsoft runtime
 
-The Windows worker includes `VCRUNTIME140.dll` and `VCRUNTIME140_1.dll` supplied with the CPython 3.11.9 Windows distribution. Microsoft runtime code is proprietary and is not licensed under this project's AGPL license. The CPython Windows redistribution conditions are reproduced in `licenses/microsoft-runtime-CPython.txt` and in the packaged Python license.
+The Windows worker includes `VCRUNTIME140.dll` and `VCRUNTIME140_1.dll` supplied with the pinned python-build-standalone Windows distribution. Microsoft runtime code is proprietary and is not licensed under this project's AGPL license. The CPython Windows redistribution conditions are reproduced in `licenses/microsoft-runtime-CPython.txt` and in the packaged Python license.
 
 Windows supplies the Universal CRT and API-set libraries; copies of `ucrtbase.dll` and `api-ms-win-*.dll` are not bundled. Windows 10 or later is required. Windows and separately installed card middleware retain their respective licenses.
 
-- CPython redistribution conditions: https://github.com/python/cpython/blob/v3.11.9/PC/crtlicense.txt
+- CPython redistribution conditions: https://github.com/python/cpython/blob/v3.11.18/PC/crtlicense.txt
 - Microsoft redistribution terms: https://learn.microsoft.com/en-us/cpp/windows/redistributing-visual-cpp-files
 
 `licenses/manifest.json` records the upstream URLs and checksums for the additional license files. The builder verifies these files, runtime versions, and the native DLL inventory before packaging.
 
 ## Linux runtime
 
-The Linux worker uses CPython 3.11.9 from python-build-standalone's 20240726 release, including OpenSSL 3.0.14 and the runtime's built-in libraries. `native_linux/runtime.json` identifies the distribution and checksums. `licenses/linux-python-sources.json` provides source locations, versions and checksums for its bundled components, including Berkeley DB under the Sleepycat license. Their complete upstream notices are retained as `licenses/linux-python-LICENSE.*`. Project integration source accompanies the plugin; Python package source releases are available from PyPI at the pinned versions in `requirements-lock.txt` and `requirements-linux.txt`.
+Both workers use CPython 3.11.18 from python-build-standalone's 20261026 release, including OpenSSL 3.5.9 and the runtime's built-in libraries. `native_linux/runtime.json` and `native_windows/runtime.json` identify the distributions and checksums. `licenses/linux-python-sources.json` provides source locations, versions and checksums for its bundled components, including Berkeley DB under the Sleepycat license. The matching upstream notice collection is retained as `licenses/linux-python-LICENSE.*`; both platform collections have the same text apart from line endings. This is the upstream distribution inventory, not a claim that every component is loaded by the frozen worker. Windows also bundles zlib and libffi, covered by this collection. Project integration source accompanies the plugin; Python package source releases are available from PyPI at the pinned versions in `requirements-lock.txt` and `requirements-linux.txt`.
 
 The worker includes python-pkcs11 0.10.0 and its license under `licenses/linux/dependencies`. GCC 8.3 runtime libraries are covered by the GPL with the GCC Runtime Library Exception; their Debian copyright and license information is in `licenses/linux-gcc-runtime-COPYRIGHT.txt`.
 
-The native card stack includes OpenSC 0.27.1 (LGPL-2.1-or-later), libusb 1.0.30 (LGPL-2.1-or-later), pcsc-lite 2.5.2 and CCID 1.8.4 (their BSD-style terms), OpenSSL 3.5.8 (Apache-2.0), and zlib 1.3.2 (zlib license). License texts are in `licenses/linux-*-LICENSE.txt`. Exact source URLs and checksums are in `native_linux/sources.json`; OpenSC, libusb, pcsc-lite and CCID source archives accompany the plugin under `native-sources/linux/`. The pcsc-lite changes for private IPC paths are supplied in `source/native_linux/private_pcsc.py`.
+The native card stack includes OpenSC 0.27.1 (LGPL-2.1-or-later), libusb 1.0.30 (LGPL-2.1-or-later), pcsc-lite 2.5.3 and CCID 1.8.4 (their BSD-style terms), OpenSSL 3.5.9 (Apache-2.0), and zlib 1.3.2 (zlib license). License texts are in `licenses/linux-*-LICENSE.txt`. Exact source URLs and checksums are in `native_linux/sources.json`; OpenSC, libusb, pcsc-lite and CCID source archives accompany the plugin under `native-sources/linux/`. The pcsc-lite changes for private IPC paths are supplied in `source/native_linux/private_pcsc.py`.
 
 The operating system supplies glibc and GTK 3. The Linux worker contains no Windows executable or Microsoft runtime dependency. The combined plugin also contains a separate Windows worker, subject to the Windows notices above.
 
 ## Installation tests
 
-Release checks download official ONLYOFFICE installers pinned in `tests/editor-installers.json` and install them only on disposable CI runners. The editor installers are not included in this plugin. Build and verification commands live in `tools/`; see [BUILDING.md](docs/BUILDING.md).
+Release checks download official ONLYOFFICE installers pinned in `tests/editor-installers*.json` and install them only on disposable CI runners. The editor installers are not included in this plugin. Build and verification commands live in `tools/`; see [BUILDING.md](docs/BUILDING.md).
 
 The hosted Linux signing test builds SoftHSM 2.6.1 with Debian 12 patches as a disposable PKCS#11 simulator. Its source checksums are pinned in `tests/linux/Dockerfile`. SoftHSM uses the BSD 2-Clause license; its source and notices are available in the [Debian source package](https://sources.debian.org/src/softhsm2/2.6.1-2.1/). SoftHSM, test keys, editor installers and container images are not bundled with the plugin. Only the test harness source accompanies the corresponding-source archive.

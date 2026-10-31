@@ -47,6 +47,10 @@ def inventory():
         result.append({"type": "library", "name": item["name"], "version": item["version"],
                        "hashes": [{"alg": "SHA-256", "content": item["sha256"]}],
                        "externalReferences": [{"type": "distribution", "url": item["url"]}]})
+    windows = json.loads((ROOT / "native_windows/runtime.json").read_text())["python"]
+    result.append({"type": "library", "name": "CPython Windows distribution", "version": windows["version"],
+                   "hashes": [{"alg": "SHA-256", "content": windows["sha256"]}],
+                   "externalReferences": [{"type": "distribution", "url": windows["url"]}]})
     # This records the upstream Python distribution inventory; its notice file describes scope.
     python = json.loads((ROOT / "licenses/linux-python-sources.json").read_text())
     for name, item in python["components"].items():

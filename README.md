@@ -16,6 +16,8 @@ The maintainer has reported physical CAC signing on Windows installations. Linux
 
 ARM64, musl-based Linux, macOS, the web editor, Flatpak and Snap are outside the supported package. Other editor versions require adapter validation. See [installation requirements](docs/INSTALLATION.md#requirements) for details.
 
+**ONLYOFFICE 10.0.0.169 is unsupported.** It restricts the native process API needed by this standalone plugin. Signing cannot be enabled by changing the field adapter alone. See [the compatibility investigation](docs/TESTING.md#onlyoffice-10-native-process-restriction).
+
 ## Install and use
 
 1. Download **CAC-PDF-Signer.plugin** from the release assets. The source ZIP is not an installable plugin.

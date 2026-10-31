@@ -6,11 +6,12 @@ For a build that needs no local toolchain, use GitHub's **Build candidate** work
 
 ## Windows worker and combined package
 
-Use Windows x64 and the official CPython 3.11.9 distribution. Create a virtual environment outside the checkout and obtain `pdfsign-bridge.exe` from the upstream [v0.1.0 release](https://github.com/192d-Wing/pdf-sign/releases/tag/v0.1.0).
+Use Windows x64 and the python-build-standalone 3.11.18 archive pinned in `native_windows/runtime.json`. Verify its SHA-256 before extraction; use the bundled `python.exe` to create a virtual environment outside the checkout and obtain `pdfsign-bridge.exe` from the upstream [v0.1.0 release](https://github.com/192d-Wing/pdf-sign/releases/tag/v0.1.0).
 
 ```powershell
-python -m pip install -r requirements-build.txt
-python -B tools/build_standalone.py --output ..\standalone-build --bridge ..\pdfsign-bridge.exe --linux-bundle ..\linux-bundle
+& ..\python-runtime\python\python.exe -m venv ..\build-venv
+..\build-venv\Scripts\python.exe -m pip install -r requirements-build.txt
+..\build-venv\Scripts\python.exe -B tools/build_standalone.py --output ..\standalone-build --bridge ..\pdfsign-bridge.exe --linux-bundle ..\linux-bundle
 ```
 
 The Linux bundle must be built first. The combined builder checks the bridge and license hashes, DLL inventory, dependency imports and both runtime manifests. It writes `CAC-PDF-Signer.plugin` and `SHA256SUMS.txt` outside the checkout.
@@ -37,4 +38,4 @@ Copy `linux-bundle` to the Windows build machine for the combined build. Require
 
 Follow [TESTING.md](TESTING.md) before submitting a research PR. `release/` is local build output and stays out of Git. The normal publication path is the three-branch GitHub workflow: qualified changes enter `research`, a frozen `release-verification` candidate waits for the owner's review, and an approved merge into `main` publishes the same tested package bytes. See [GitHub maintenance](AUTOMATION.md).
 
-The release publisher verifies the source tree, native manifests, checksum, owner approval and artifact identity before creating or resuming a GitHub release. It does not rebuild after approval. Existing release assets and tags are immutable; changed source requires a new candidate and version. Editor installer pins in `tests/editor-installers.json` are test dependencies, not part of the plugin.
+The release publisher verifies the source tree, native manifests, checksum, owner approval and artifact identity before creating or resuming a GitHub release. It does not rebuild after approval. Existing release assets and tags are immutable; changed source requires a new candidate and version. Editor installer pins in `tests/editor-installers*.json` are test dependencies, not part of the plugin.

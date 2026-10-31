@@ -8,6 +8,12 @@ window.CACDesktop = function (host) {
   try {
     if (api && typeof api.GetVersion === "function") version = api.GetVersion();
   } catch (_) {}
+  if (/^10\.0\.0(?:\.|$)/.test(version)) {
+    throw new Error(
+      "ONLYOFFICE " + version + " restricts the native process API required by CAC PDF Signer. " +
+      "Signing is unavailable in this editor version. No CAC was accessed or document signed.",
+    );
+  }
   const pdfMode = api && typeof api.asc_getPdfProps === "function" &&
     String(api.asc_getPdfProps).replace(/\s/g, "") === fingerprint.replace(/\s/g, "");
   const formMode = api && typeof api.asc_getPdfProps === "function" &&

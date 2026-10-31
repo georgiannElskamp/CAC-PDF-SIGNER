@@ -16,6 +16,8 @@ The Linux plugin includes OpenSC, PC/SC and a USB CCID driver. It reuses an avai
 
 ARM64, musl-based Linux, macOS, the web editor, Flatpak and Snap are outside this package's supported scope. RPM and AppImage installation are untested. Windows application-control policies may block the unsigned worker. See the [validation matrix](TESTING.md) for tested configurations and outstanding hardware checks.
 
+**ONLYOFFICE 10.0.0.169 is unsupported.** It restricts the native process API needed by this standalone plugin. Signing cannot be enabled by changing the field adapter alone. See [the compatibility investigation](TESTING.md#onlyoffice-10-native-process-restriction).
+
 ## Install or update
 
 1. If an older version is running, turn it off under **Plugins > Background plugins**.
@@ -72,3 +74,5 @@ Verification checks signature integrity. Certificate trust, revocation and trust
 ## Uninstall
 
 Disable **CAC PDF Signer** under **Background plugins**, then remove it in Plugin Manager and close the PDF. Removing plugin files alone can leave a running instance active until the document closes.
+
+ONLYOFFICE must launch before the plugin can run. On minimal Debian/Ubuntu installations, ONLYOFFICE 10 may need the `libxcb-shape0` display package even though its installer does not declare it. This is an editor startup dependency; the CAC worker still carries its own signing middleware.

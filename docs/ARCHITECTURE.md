@@ -15,13 +15,15 @@ ONLYOFFICE PDF form signature boxes export as image buttons rather than PDF `/Si
 
 The first click makes no card request. The worker copies the standard PDF objects, converts each empty signature button into a `/Sig` field while retaining its appearance, and stores a separate unsigned `CAC-review` PDF with a hash-bound handoff record under the user's `Prepared` directory. The plugin opens that PDF in ordinary PDF mode. After the user reviews it, the second click sends the review PDF's in-memory bytes to the worker for PIN entry, signing, verification and Save As. The worker rejects a changed or missing handoff and will not overwrite either the original form or review copy. The signed copy does not retain the editable form package. Existing signed forms are rejected because copying them would invalidate their signatures.
 
-The form adapter is pinned to Desktop Editors 9.4.0.129 internals. Its recovery snapshot is the PDF that ONLYOFFICE loaded, which may differ from a file subsequently changed on disk. The hosted form test clicks a real signature box and checks that the review PDF retains the loaded page content. It also tries to replace the source after load; the local Windows editor locked that file, so the Linux runner provides the replacement check.
+The form adapter is pinned to the Desktop Editors 9.4.0.129 interface. Its recovery snapshot is the PDF that ONLYOFFICE loaded, which may differ from a file subsequently changed on disk. The hosted form test clicks a real signature box and checks that the review PDF retains the loaded page content. It also tries to replace the source after load; the local Windows editor locked that file, so the Linux runner provides the replacement check.
 
 ## Platform integration
 
-The PDF-field adapter and process interface depend on ONLYOFFICE internals and are validated against Desktop Editors 9.4.0.129. An incompatible adapter fails before signing. PDF documents can report `editorType: word` with `editorSubType: pdf`; the manifest and startup guard account for both.
+The PDF-field adapter and process interface depend on ONLYOFFICE internals and are qualified against Desktop Editors 9.4.0.129. An incompatible adapter fails before signing. PDF documents can report `editorType: word` with `editorSubType: pdf`; the manifest and startup guard account for both.
 
-This editor version splits Windows executable paths at the first space. The launcher uses the built-in `cmd.exe` with tab-separated arguments, quoted paths, and disabled AutoRun and delayed expansion. Existing short-name aliases reduce executable and temporary paths when available. The editor's own loader still limits long plugin paths.
+ONLYOFFICE 10.0.0.169 restricts process creation and stdin to specific built-in plugin frames. The plugin stops before creating a native client in that version. Supporting it requires an upstream approved native API or a separately reviewed architecture; impersonating the privileged plugin is not part of this implementation. See [evidence and limits](TESTING.md#onlyoffice-10-native-process-restriction).
+
+The supported editor version splits Windows executable paths at the first space. The launcher uses the built-in `cmd.exe` with tab-separated arguments, quoted paths, and disabled AutoRun and delayed expansion. Existing short-name aliases reduce executable and temporary paths when available. The editor's own loader still limits long plugin paths.
 
 Linux launches `/bin/sh` with a path argument parsed by the editor, without evaluating that path as shell code. The launcher adds execute permission only when needed. A bundled PC/SC process uses a short private socket path when no system service is available, and stops after the operation. Reader access remains subject to OS permissions.
 
@@ -33,6 +35,7 @@ The installation filesystem must permit execution; temporary storage need not. T
 | --- | --- |
 | Root Python modules | Signing, certificate selection, appearance, dialogs and recovery |
 | `plugin/` | ONLYOFFICE background integration and native transport |
+| `native_windows/` | Pinned Windows Python distribution and native DLL inventory |
 | `native_linux/` | Pinned middleware sources, build script and private PC/SC adaptation |
 | `fonts/` | Signature fonts, checksums and upstream font licenses |
 | `tools/` | Build, audit, test and release commands |

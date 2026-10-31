@@ -77,6 +77,11 @@ function adapterTest() {
     context,
   );
   const adapter = context.window.CACDesktop(host);
+  for (const version of ["10.0.0", "10.0.0.169"]) {
+    api.GetVersion = () => version;
+    assert.throws(() => context.window.CACDesktop(host), /restricts the native process API/);
+  }
+  delete api.GetVersion;
   adapter.attach(
     (f) => clicks.push(f),
     (e) => errors.push(e),

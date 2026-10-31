@@ -128,7 +128,7 @@ def supports_form_handoff(version):
     return tuple(map(int, match.groups())) >= (0, 9, 0)
 
 
-def check(package, manifest=None, plugin_version=None, form_handoff=False):
+def check(package, manifest=None, plugin_version=None, form_handoff=False, expect_unsupported=False):
     if os.environ.get("GITHUB_ACTIONS") != "true" or os.environ.get("RUNNER_ENVIRONMENT") != "github-hosted":
         raise RuntimeError("This installer is restricted to disposable GitHub-hosted runners.")
     if sys.platform not in ("win32", "linux") or platform.machine().lower() not in ("amd64", "x86_64"):
@@ -150,7 +150,9 @@ def check(package, manifest=None, plugin_version=None, form_handoff=False):
             subprocess.run([str(installer), "/VERYSILENT", "/SP-", "/SUPPRESSMSGBOXES", "/NORESTART", "/TASKS="], check=True, timeout=300)
             editor = Path(os.environ["ProgramFiles"]) / "ONLYOFFICE/DesktopEditors/DesktopEditors.exe"
         else:
-            subprocess.run(["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y", str(installer)], check=True, timeout=300)
+            # A failed newer-editor probe is followed by the pinned control on this disposable runner.
+            subprocess.run(["sudo", "env", "DEBIAN_FRONTEND=noninteractive", "apt-get", "install", "-y",
+                            "--allow-downgrades", "libxcb-shape0", str(installer)], check=True, timeout=300)
             launcher = shutil.which("onlyoffice-desktopeditors") or shutil.which("desktopeditors")
             if not launcher:
                 raise RuntimeError("The official ONLYOFFICE launcher was not installed.")
@@ -204,8 +206,11 @@ def check(package, manifest=None, plugin_version=None, form_handoff=False):
                             child.kill()
                         child.wait(timeout=10)
 
-        run_session(pdf, 9251, "tests/editor_smoke.js", [str(package.resolve()), version, pdf.name], "standard")
-        if form_handoff or supports_form_handoff(version):
+        arguments = [str(package.resolve()), version, pdf.name]
+        if expect_unsupported:
+            arguments.append("--expect-unsupported")
+        run_session(pdf, 9251, "tests/editor_smoke.js", arguments, "standard")
+        if not expect_unsupported and (form_handoff or supports_form_handoff(version)):
             from check_form_handoff import verify as verify_form_handoff
 
             form = work / "Example User é" / "form source.pdf"
@@ -223,5 +228,6 @@ if __name__ == "__main__":
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--plugin-version")
     parser.add_argument("--form-handoff", action="store_true")
+    parser.add_argument("--expect-unsupported", action="store_true")
     args = parser.parse_args()
-    check(args.package, args.manifest, args.plugin_version, args.form_handoff)
+    check(args.package, args.manifest, args.plugin_version, args.form_handoff, args.expect_unsupported)

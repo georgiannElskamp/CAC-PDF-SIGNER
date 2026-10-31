@@ -209,6 +209,14 @@ function hostTest() {
     assert.equal(blocked.context.process, undefined);
     assert.match(blocked.sent.at(-1).result.error, /Unsupported/);
   }
+  for (const id of [undefined, null, -1]) {
+    const blocked = harness("native-host.js");
+    blocked.context.ExternalProcess.prototype.start = function () { this.id = id; };
+    blocked.handlers.message({ ...event, source: blocked.context.parent });
+    assert.match(blocked.sent.at(-1).result.error, /could not start/);
+    assert.equal(blocked.timers.size, 0, "Denied process creation must fail without a startup timeout.");
+    assert.equal(blocked.context.process.input, "");
+  }
 }
 function launchHost(location, platform = "Win32") {
   const h = harness("native-host.js", location, platform);
