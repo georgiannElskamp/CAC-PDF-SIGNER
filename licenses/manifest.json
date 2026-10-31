@@ -23,9 +23,9 @@
     },
     {
       "component": "OpenSSL (cryptography)",
-      "version": "4.0.2",
-      "file": "openssl-4.0.2-APACHE-2.0.txt",
-      "source": "https://raw.githubusercontent.com/openssl/openssl/openssl-4.0.2/LICENSE.txt",
+      "version": "4.0.3",
+      "file": "openssl-4.0.3-APACHE-2.0.txt",
+      "source": "https://raw.githubusercontent.com/openssl/openssl/openssl-4.0.3/LICENSE.txt",
       "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
     },
     {
@@ -172,9 +172,9 @@
     },
     {
       "component": "HarfBuzz (uharfbuzz)",
-      "version": "14.5.0",
-      "file": "harfbuzz-14.5.0-MIT.txt",
-      "source": "https://raw.githubusercontent.com/harfbuzz/harfbuzz/14.5.0/COPYING",
+      "version": "15.0.0",
+      "file": "harfbuzz-15.0.0-MIT.txt",
+      "source": "https://raw.githubusercontent.com/harfbuzz/harfbuzz/15.0.0/COPYING",
       "sha256": "ba8f810f2455c2f08e2d56bb49b72f37fcf68f1f4fade38977cfd7372050ad64"
     }
   ]
