@@ -10,7 +10,7 @@ import re
 import urllib.error
 import urllib.request
 from release_manifest import resolve as resolve_plugin
-from maintenance import window, scheduled_allowed, require_window
+from maintenance import window, report_window, scheduled_allowed, require_window
 
 PUBLIC = "georgiannElskamp/CAC-PDF-SIGNER"
 UPSTREAM = "ONLYOFFICE/DesktopEditors"
@@ -23,7 +23,7 @@ def api(path, method="GET", body=None, dispatch=False, anonymous=False, closing=
         if closing:
             if (method not in {"POST", "PATCH"} or not re.fullmatch(r"/repos/" + re.escape(PRIVATE) + r"/issues(?:/[0-9]+)?", path)
                     or not scheduled_allowed(os.environ.get("GITHUB_EVENT_NAME"), closing=True)):
-                raise ValueError("Closing report can only update its private issue on maintenance day")
+                raise ValueError("Closing report can only update its private issue within the reporting window")
         else:
             require_window()
     headers = {"Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28"}
@@ -45,10 +45,7 @@ def stale(value, hours):
 
 
 def report_stale(value):
-    cycle = window()
-    if cycle["day"]:
-        return not value or datetime.fromisoformat(value.replace("Z", "+00:00")) < cycle["start"]
-    return stale(value, 35 * 24)
+    return not value or datetime.fromisoformat(value.replace("Z", "+00:00")) < report_window()["start"]
 
 
 def full_reconciliation_current(pipeline):
@@ -202,6 +199,7 @@ def watch(force=False):
 
 
 def health():
+    cycle = report_window()
     state, _ = load_state()
     reconcile(state, dispatch=False)
     problems = []
@@ -220,7 +218,7 @@ def health():
     for key, record in state["records"].items():
         if record["status"] != "completed":
             problems.append(f"{record['tag']}: dispatch {key[:12]} has no completed result. Inspect before manually retrying.")
-        elif record.get("cycle") == window()["id"] and record.get("conclusion") != "success":
+        elif record.get("cycle") == cycle["id"] and record.get("conclusion") != "success":
             problems.append(f"{record['tag']}: compatibility result is {record.get('conclusion')}; review {record.get('url', '')}.")
     for item in state.get("pendingAssets", []):
         problems.append(item["tag"] + ": " + item["reason"])
@@ -238,7 +236,7 @@ def health():
         if error.code != 404:
             raise
         monthly = {}
-    run_id = monthly.get("cycles", {}).get(window()["id"], {}).get("runs", {}).get("discovery")
+    run_id = monthly.get("cycles", {}).get(cycle["id"], {}).get("runs", {}).get("discovery")
     discovery = api(f"/repos/{PRIVATE}/actions/runs/{run_id}") if run_id else None
     if not discovery or discovery["conclusion"] != "success":
         problems.append("Monthly dependency/discovery workflow needs attention; dependency updates are not verified.")
@@ -254,7 +252,7 @@ def health():
             incomplete = sum(c["status"] != "completed" or c["conclusion"] not in {"success", "skipped", "neutral"} for c in checks)
             rows.append(f"- [{repo} #{pull['number']}]({pull['html_url']}), target `{pull['base']['ref']}`, commit `{sha}`. "
                         f"Commit status: {status}; {incomplete} unfinished/unsuccessful check(s).")
-    title = "Monthly maintenance " + window()["id"]
+    title = "Monthly maintenance " + cycle["id"]
     issues = api(f"/repos/{PRIVATE}/issues?state=all&per_page=100")
     issue = next((item for item in issues if item["title"] == title and not item.get("pull_request")
                   and item.get("user", {}).get("login") == "github-actions[bot]"), None)

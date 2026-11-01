@@ -34,10 +34,10 @@ REQUIRED_NOTICES = {
     "reportlab-BSD-3-Clause.txt",
     "go-BSD-3-Clause.txt",
     "go-x-sys-BSD-3-Clause.txt",
-    "openssl-3.0.13-APACHE-2.0.txt",
-    "openssl-4.0.2-APACHE-2.0.txt",
+    "linux-python-LICENSE.openssl-3.txt",
+    "openssl-4.0.3-APACHE-2.0.txt",
     "microsoft-runtime-CPython.txt",
-    "harfbuzz-14.5.0-MIT.txt",
+    "harfbuzz-15.0.0-MIT.txt",
 }
 
 
@@ -80,15 +80,8 @@ def build_environment():
 def verify_native(executable, bridge):
     directory = executable.parent / "_internal"
     base = Path(sys.base_prefix)
-    expected = {
-        "python3.dll": base / "python3.dll",
-        "python311.dll": base / "python311.dll",
-        "vcruntime140.dll": base / "vcruntime140.dll",
-        "vcruntime140_1.dll": base / "vcruntime140_1.dll",
-        "libcrypto-3.dll": base / "DLLs/libcrypto-3.dll",
-        "libssl-3.dll": base / "DLLs/libssl-3.dll",
-        "libffi-8.dll": base / "DLLs/libffi-8.dll",
-    }
+    pins = json.loads((ROOT / "native_windows/runtime.json").read_text())
+    expected = {Path(path).name.lower(): base / path for path in pins["dlls"]}
     dlls = {p.name.lower(): p for p in directory.rglob("*.dll")}
     if set(dlls) != set(expected):
         raise ValueError(
@@ -106,11 +99,15 @@ def verify_native(executable, bridge):
 def licenses():
     """Collect dependency licenses for the release archive."""
     from cryptography.hazmat.backends.openssl.backend import backend
+    import uharfbuzz
 
+    platform = "native_windows" if sys.platform == "win32" else "native_linux"
+    runtime = json.loads((ROOT / platform / "runtime.json").read_text())["python"]
     if (
-        sys.version_info[:3] != (3, 11, 9)
-        or ssl.OPENSSL_VERSION.split()[1] != ("3.0.13" if sys.platform == "win32" else "3.0.14")
-        or backend.openssl_version_text().split()[1] != "4.0.2"
+        sys.version_info[:3] != tuple(map(int, runtime["version"].split(".")))
+        or ssl.OPENSSL_VERSION.split()[1] != runtime["opensslVersion"]
+        or backend.openssl_version_text().split()[1] != "4.0.3"
+        or uharfbuzz.version_string() != "15.0.0"
     ):
         raise ValueError("Runtime versions changed; update the native license inventory.")
     names = [

@@ -1,2 +1,2 @@
 -r requirements-lock.txt
-python-pkcs11==0.10.0
+python-pkcs11==0.10.1

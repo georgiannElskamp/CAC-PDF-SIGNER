@@ -1,8 +1,8 @@
 {
-  "version": "0.10.0",
+  "version": "0.11.0",
   "type": "minor",
-  "research": "9d47964e69ce88cdfd71f7907db203f3810c2c86",
-  "baseMain": "fa46cf94bae7feefe449c6de42c2aa00348802ba",
-  "researchRun": 36157389929,
-  "previousTag": "v0.9.1"
+  "research": "557e386cbe325802882d786509cbbbd41220cc64",
+  "baseMain": "741cd903c3bff9967a00c3bf89531eaa3da21359",
+  "researchRun": 41249054941,
+  "previousTag": "v0.10.0"
 }

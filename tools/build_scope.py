@@ -10,7 +10,7 @@ def requires_build(paths):
     files = {"requirements-lock.txt", "requirements-linux.txt", "requirements-build.txt", "requirements-native-build.txt", ".python-version",
              "tools/build_standalone.py", "tools/build_linux.py", "tools/bundle_manifest.py",
              "tools/candidate.py", ".github/workflows/build-candidate.yml", ".github/workflows/candidate-checks.yml"}
-    prefixes = ("plugin/", "native_linux/", "fonts/", "licenses/")
+    prefixes = ("plugin/", "native_linux/", "native_windows/", "fonts/", "licenses/")
     return any(path in files or path.startswith(prefixes)
                or (len(PurePosixPath(path).parts) == 1 and path.endswith(".py")) for path in paths)
 

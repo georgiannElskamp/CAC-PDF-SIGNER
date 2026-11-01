@@ -45,6 +45,32 @@ class MonthlyCalendarTests(unittest.TestCase):
         self.assertFalse(maintenance.scheduled_allowed("schedule", at))
         self.assertTrue(maintenance.scheduled_allowed("workflow_dispatch", at))
 
+    def test_delayed_report_uses_previous_batch_without_extending_mutations(self):
+        for stamp, cycle in (("2026-10-31T03:20:00", "2026-10"),
+                             ("2026-10-01T03:20:00", "2026-09"),
+                             ("2026-03-01T03:20:00", "2026-02"),
+                             ("2028-03-01T03:20:00", "2028-02")):
+            with self.subTest(stamp=stamp):
+                at = self.local(stamp)
+                self.assertEqual(maintenance.report_window(at)["id"], cycle)
+                self.assertTrue(maintenance.scheduled_allowed("schedule", at, closing=True))
+                self.assertFalse(maintenance.scheduled_allowed("schedule", at))
+                with patch.object(maintenance, "clock", return_value=at):
+                    self.assertTrue(scheduler.report_stale("2026-01-30T12:00:00Z"))
+                    self.assertFalse(maintenance.claim(Mock(data={}), "discovery"))
+        for stamp in ("2026-10-31T21:00:00", "2026-11-01T01:00:00", "2028-02-28T21:07:00"):
+            self.assertFalse(maintenance.scheduled_allowed("schedule", self.local(stamp), closing=True))
+
+    def test_rejected_codex_token_stops_before_state_or_pr_processing(self):
+        for code in (401, 403):
+            error = github_api.urllib.error.HTTPError("https://api.github.com/user", code, "denied", {}, None)
+            with patch.dict(os.environ, {"GITHUB_REPOSITORY": dependencies.PRIVATE, "GITHUB_EVENT_NAME": "workflow_dispatch"}), \
+                 patch.object(sys, "argv", ["pipeline.py", "--pr-only"]), \
+                 patch.object(pipeline, "api", side_effect=error), patch.object(pipeline, "State") as state:
+                with self.assertRaisesRegex(SystemExit, "CODEX_TRIGGER_TOKEN was rejected"):
+                    pipeline.main()
+                state.assert_not_called()
+
     def test_claim_is_durable_bounded_and_expires(self):
         state = Mock(data={})
         with patch.object(maintenance, "clock", return_value=self.local("2026-09-30T03:00:00")):
@@ -64,7 +90,7 @@ class MonthlyCalendarTests(unittest.TestCase):
             self.assertFalse(scheduler.report_stale("2026-09-30T12:00:00Z"))
 
     def test_report_uses_claimed_scan_not_a_later_noop_kickoff(self):
-        at = self.local("2026-09-30T21:07:00")
+        at = self.local("2026-10-01T03:20:00")
         state = {"records": {}, "lastSuccessfulPoll": "2026-09-30T12:00:00Z", "deferredEditors": ["v9.4.0"]}
         monthly = {"cycles": {"2026-09": {"runs": {"discovery": "42"}}}}
         posted = []
@@ -235,7 +261,9 @@ class DependencyProposalTests(unittest.TestCase):
         source = lambda path: (before, "100644")
         self.assertTrue(dependencies.proposals(self.output(".github/workflows/checks.yml", after), "actions", SHA, source))
         for changed in (after + "  - run: evil\n", after.replace("actions/checkout", "other/checkout"), after.replace(MAIN, "v2"),
-                        after.replace("# v2", "# confidential data")):
+                        after.replace("# v2", "# confidential data"),
+                        after.rstrip("\n") + "\r  - run: evil # uses: a/b@" + "c" * 40 + "\n",
+                        after.replace("\n", "\r\n")):
             with self.assertRaises(ValueError):
                 dependencies.proposals(self.output(".github/workflows/checks.yml", changed), "actions", SHA, source)
 

@@ -2,6 +2,7 @@
 const fs = require("node:fs");
 const assert = require("node:assert/strict");
 const { connect, until } = require("./editor_cdp");
+const { installProbe } = require("./editor_interface");
 const GUID = "asc.{9A58C737-A6B4-4E31-8D3F-2C940B716EF9}";
 
 function fixture(destination) {
@@ -24,7 +25,7 @@ function fixture(destination) {
   fs.writeFileSync(destination, pdf);
 }
 
-async function smoke(port, packagePath, version, fixtureName) {
+async function smoke(port, packagePath, version, fixtureName, expectUnsupported) {
   const editor = await connect(port, (p) => p.url.includes("doctype=pdf") &&
     (!fixtureName || new URL(p.url).searchParams.get("title") === fixtureName),
     "typeof PDFE !== 'undefined' && typeof Asc !== 'undefined' && !!Asc.editor && typeof AscDesktopEditor !== 'undefined'");
@@ -34,12 +35,13 @@ async function smoke(port, packagePath, version, fixtureName) {
   const progress = (value) => { stage = value; console.log(`Checking: ${stage}`); };
   try {
     progress("adapter interface discovery");
-    await until(() => run(() => !!Asc.editor?.jf?.file?.Mp && typeof Asc.editor.jf.Qd === "function"),
+    await run(installProbe);
+    await until(() => run(() => CACTestPdf.ready()),
       "Unsupported PDF interface: inspect both the plugin adapter and test harness before diagnosing compatibility.");
     assert.equal(await run((guid) => JSON.parse(AscDesktopEditor.GetInstallPlugins()).some((g) => (g.pluginsData || []).some((p) => p.guid === guid)), GUID), false,
       "CAC is already installed. Use a disposable profile.");
     const initial = await until(() => run(() => {
-      const fields = Asc.editor.jf.file.Mp.getInteractiveFormsInfo()?.Fields;
+      const fields = CACTestPdf.fields();
       return fields?.length ? fields.map((f) => ({ name: f.name, type: f.type, signed: !!f.Sig })) : null;
     }), "The installation fixture's signature field did not load.");
     assert.deepEqual(initial, [{ name: "InstallationTest", type: 33, signed: false }], "Open only the generated installation fixture.");
@@ -59,37 +61,70 @@ async function smoke(port, packagePath, version, fixtureName) {
       await run((guid) => {
         if (!Asc.editor.getUsedBackgroundPlugins().includes(guid)) Asc.editor.asc_pluginRun(guid, 0, "");
       }, GUID);
-      await until(() => run(() => {
-        const fields = Asc.editor.jf.Qd().lC.filter((w) => w.type === 33);
-        return fields.length === 1 && fields.every((w) => String(w.Vh).includes("onClick(f.name)"));
-      }), "The background plugin did not finish preflight and attach its field handler.");
-      progress("native preflight");
-      const result = await run(async (guid) => {
-        const frame = document.getElementById("iframe_" + guid);
-        const client = frame.contentWindow.CACNativeClient();
-        try { return await client.call({ op: "preflight" }); } finally { client.close(); }
-      }, GUID);
-      assert.equal(result.ok, true);
-      assert.equal(result.version, version);
-      assert.equal(result.desktopReady, true);
-      assert.equal(result.recoveryWritable, true);
-      assert.equal(result.cardChecked, false);
+      if (expectUnsupported) {
+        await until(() => run(() => Array.from(document.querySelectorAll(".asc-window.modal")).some(
+          (n) => n.textContent.includes("restricts the native process API") &&
+                 n.textContent.includes("No CAC was accessed or document signed"))),
+        "The unsupported editor did not show the expected compatibility message.", 10000);
+        assert.equal(await run((guid) => !!document.getElementById("iframe_" + guid)?.contentDocument?.querySelector("iframe"), GUID), false,
+          "The unsupported editor must not create a native worker client.");
+        assert.equal(await run(() => CACTestPdf.widgets().every((w) => /^function\(\)\{\}$/.test(String(CACTestPdf.click(w)).replace(/\s/g, "")))), true,
+          "The unsupported editor must leave signature handlers untouched.");
+        await run(() => Array.from(document.querySelectorAll(".asc-window.modal button, .asc-window.modal .btn")).find(
+          (n) => n.textContent.trim() === "OK")?.click());
+        await until(() => run(() => !Array.from(document.querySelectorAll(".asc-window.modal")).some(
+          (n) => n.textContent.includes("restricts the native process API"))), "The compatibility dialog could not be dismissed.", 10000);
+      } else {
+        await until(() => run(() => {
+          const fields = CACTestPdf.widgets().filter((w) => w.type === 33);
+          return fields.length === 1 && fields.every((w) => String(CACTestPdf.click(w)).includes("onClick(f.name)"));
+        }), "The background plugin did not finish preflight and attach its field handler.");
+        progress("native preflight");
+        const result = await run(async (guid) => {
+          const frame = document.getElementById("iframe_" + guid);
+          const client = frame.contentWindow.CACNativeClient();
+          try { return await client.call({ op: "preflight" }); } finally { client.close(); }
+        }, GUID);
+        assert.equal(result.ok, true);
+        assert.equal(result.version, version);
+        assert.equal(result.desktopReady, true);
+        assert.equal(result.recoveryWritable, true);
+        assert.equal(result.cardChecked, false);
+      }
       progress("disable");
       await run((guid) => Asc.editor.asc_pluginStop(guid), GUID);
       await until(() => run((guid) => !document.getElementById("iframe_" + guid) &&
-        Asc.editor.jf.Qd().lC.every((w) => /^function\(\)\{\}$/.test(String(w.Vh).replace(/\s/g, ""))), GUID),
+        CACTestPdf.widgets().every((w) => /^function\(\)\{\}$/.test(String(CACTestPdf.click(w)).replace(/\s/g, ""))), GUID),
       "Disabling the plugin did not restore the field handler.");
       progress("uninstall");
       await run((guid) => AscDesktopEditor.PluginUninstall(guid, false), GUID);
       await until(() => run((guid) => !JSON.parse(AscDesktopEditor.GetInstallPlugins()).some((g) => (g.pluginsData || []).some((p) => p.guid === guid)) &&
         !PDFE.getController("Common.Controllers.Plugins").backgroundPlugins.some((p) => p.get("guid") === guid) &&
         !Asc.editor.getUsedBackgroundPlugins().includes(guid) &&
-        !document.getElementById("iframe_" + guid) && Asc.editor.jf.Qd().lC.every((w) => /^function\(\)\{\}$/.test(String(w.Vh).replace(/\s/g, ""))), GUID),
+        !document.getElementById("iframe_" + guid) && CACTestPdf.widgets().every((w) => /^function\(\)\{\}$/.test(String(CACTestPdf.click(w)).replace(/\s/g, ""))), GUID),
       "Uninstall did not remove the plugin and restore the field handler.");
       installed = false;
     }
-    console.log(`PASS: ONLYOFFICE installation, background listing, native preflight, uninstall and reinstall (${version}). No card accessed.`);
+    console.log(expectUnsupported
+      ? `PASS: unsupported editor rejects signing before native startup; uninstall and reinstall (${version}). This does not qualify signing compatibility.`
+      : `PASS: ONLYOFFICE installation, background listing, native preflight, uninstall and reinstall (${version}). No card accessed.`);
   } catch (error) {
+    console.error("Editor diagnostics:", await run((guid) => {
+      const frame = document.getElementById("iframe_" + guid);
+      return {
+        version: Asc.editor.GetVersion(),
+        fingerprint: String(Asc.editor.asc_getPdfProps),
+        editorType: frame?.contentWindow?.Asc?.plugin?.info?.editorType,
+        editorSubType: frame?.contentWindow?.Asc?.plugin?.info?.editorSubType,
+        dialogs: Array.from(document.querySelectorAll(".asc-window.modal")).map((n) => n.textContent.slice(0, 2000)),
+        fields: window.CACTestPdf?.fields(),
+        widgets: window.CACTestPdf?.widgets()?.map((w) => ({
+          type: w.type, click: String(CACTestPdf.click(w)),
+          appearance: typeof w.ZT === "function" ? w.ZT() : typeof w.u0 === "function" ? w.u0() : null,
+          filled: typeof w.Ufb === "function" ? w.Ufb() : typeof w.Cte === "function" ? w.Cte() : null,
+        })),
+      };
+    }, GUID).catch((diagnostic) => ({ unavailable: diagnostic.message })));
     throw new Error(`${stage}: ${error.message}`, { cause: error });
   } finally {
     if (installed) await run((guid) => {
@@ -101,9 +136,11 @@ async function smoke(port, packagePath, version, fixtureName) {
 }
 
 const args = process.argv.slice(2);
+const expectUnsupported = args.includes("--expect-unsupported");
+if (expectUnsupported) args.splice(args.indexOf("--expect-unsupported"), 1);
 if (args[0] === "--fixture" && args.length === 2) fixture(args[1]);
 else if ((args.length === 4 || args.length === 5) && args[0] === "--disposable-profile" && /^\d+$/.test(args[1])) {
-  smoke(Number(args[1]), args[2], args[3], args[4]).catch((error) => { console.error(error.message); process.exitCode = 1; });
+  smoke(Number(args[1]), args[2], args[3], args[4], expectUnsupported).catch((error) => { console.error(error.message); process.exitCode = 1; });
 } else {
   console.error("Usage: node tests/editor_smoke.js --fixture <pdf>\n       node tests/editor_smoke.js --disposable-profile <debug-port> <native-package-path> <version> [fixture-name]");
   process.exitCode = 2;

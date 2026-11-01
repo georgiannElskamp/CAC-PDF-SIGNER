@@ -1,2 +1,2 @@
 -r requirements-lock.txt
-reportlab==5.0.1
+reportlab==5.1.0

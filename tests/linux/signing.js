@@ -2,6 +2,7 @@ const fs = require("node:fs");
 const assert = require("node:assert/strict");
 const cp = require("node:child_process");
 const crypto = require("node:crypto");
+const { installProbe } = require("../editor_interface");
 const GUID = "asc.{9A58C737-A6B4-4E31-8D3F-2C940B716EF9}";
 const home = process.env.HOME;
 const source = home + "/Documents/installation-test.pdf";
@@ -68,14 +69,15 @@ async function main() {
         catch(e){if(!/context.*(find|destroy)|find.*context/i.test(e.message))throw e;}
       }
     },"PDF context missing");
-    await until(()=>run(()=>Asc.editor.jf?.file?.Mp?.getInteractiveFormsInfo()?.Fields?.length===1),"Fixture field missing");
+    await run(installProbe);
+    await until(()=>run(()=>CACTestPdf.fields()?.length===1),"Fixture field missing");
     assert.equal(await run(()=>AscDesktopEditor.LocalFileGetSourcePath()),source);
     assert.equal(await run(guid=>JSON.parse(AscDesktopEditor.GetInstallPlugins()).some(g=>(g.pluginsData||[]).some(p=>p.guid===guid)),GUID),false);
     console.log("Installing unchanged published plugin");
     assert.equal(await run(path=>AscDesktopEditor.PluginInstall(path),root+"/CAC-PDF-Signer.plugin"),true);
     await until(()=>run(guid=>PDFE.getController("Common.Controllers.Plugins").backgroundPlugins?.some(p=>p.get("guid")===guid),GUID),"Background listing missing");
     await run(guid=>{if(!Asc.editor.getUsedBackgroundPlugins().includes(guid))Asc.editor.asc_pluginRun(guid,0,"");},GUID);
-    await until(()=>run(()=>Asc.editor.jf.Qd().lC.some(w=>w.type===33&&String(w.Vh).includes("onClick(f.name)"))),"Field handler did not attach");
+    await until(()=>run(()=>CACTestPdf.widgets().some(w=>w.type===33&&String(CACTestPdf.click(w)).includes("onClick(f.name)"))),"Field handler did not attach");
     await delay(1500);
     const install = home + "/.local/share/onlyoffice/desktopeditors/sdkjs-plugins/" + GUID.slice(4);
     const noCardEnvironment = {...process.env, CAC_SIGNATURE_HOME: home + "/no-card-control"};
@@ -134,7 +136,11 @@ async function main() {
     report.recoveryHash=signedHash;
     assert.equal(metadata.sha256,signedHash);
     console.log("Signature created; cancelling Save As");
-    key(save,"Escape");
+    // The mapped GTK window may precede its keyboard event handler.
+    for (let attempt = 0; attempt < 3 && windows("Save signed PDF as").includes(save); attempt++) {
+      key(save,"Escape");
+      await delay(500);
+    }
     await until(()=>!windows("Save signed PDF as").length,"Save As did not cancel");
     await delay(1500);
     assert(!fs.existsSync(output));
@@ -174,9 +180,9 @@ async function main() {
     report.signedFileOpened=await until(async()=>{
       for(const id of sessionContexts.get(attached.sessionId) || []) {
         try {
-          const value=await evaluate(id, `typeof Asc !== 'undefined' && typeof AscDesktopEditor !== 'undefined' &&
+          const value=await evaluate(id, `typeof Asc !== 'undefined' && !!Asc.editor && typeof AscDesktopEditor !== 'undefined' &&
             AscDesktopEditor.LocalFileGetSourcePath() === ${JSON.stringify(output)} &&
-            Asc.editor?.jf?.file?.Mp?.getInteractiveFormsInfo()?.Fields?.some(f => f.name === 'InstallationTest' && !!f.Sig)`, attached.sessionId);
+            ((${installProbe.toString()})(), CACTestPdf.fields()?.some(f => f.name === 'InstallationTest' && !!f.Sig))`, attached.sessionId);
           if(value) return true;
         } catch(error) { if(!/context.*(find|destroy)|find.*context/i.test(error.message)) throw error; }
       }

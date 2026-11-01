@@ -3,7 +3,7 @@ ENV DEBIAN_FRONTEND=noninteractive LANG=C.UTF-8 LC_ALL=C.UTF-8 PYTHONDONTWRITEBY
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl xz-utils python3 python3-pil build-essential libssl-dev patch \
     libtool automake autoconf pkg-config gnutls-bin openssl xvfb xauth \
-    xdotool poppler-utils libgbm1 dbus-x11 && rm -rf /var/lib/apt/lists/*
+    xdotool poppler-utils libgbm1 libxcb-shape0 dbus-x11 && rm -rf /var/lib/apt/lists/*
 WORKDIR /opt/test-build
 RUN curl -fsSLo node.tar.xz https://nodejs.org/dist/v22.23.2/node-v22.23.2-linux-x64.tar.xz \
     && echo 'd60acfe00a2932254bb0ad20e01b0d74397a0875595de719654b214f4b03f307  node.tar.xz' | sha256sum -c - \

@@ -31,13 +31,13 @@ cd "$work/zlib-1.3.2"
 ./configure --prefix="$prefix" --libdir="$prefix/lib"
 make -j "$jobs"
 make install
-cd "$work/openssl-3.5.8"
+cd "$work/openssl-3.5.9"
 [ ! -f Makefile ] || make clean
 ./Configure --prefix="$prefix" --libdir=lib shared no-tests no-asm
 make -j "$jobs"
 make install_sw
-python "$script_dir/private_pcsc.py" "$work/pcsc-lite-2.5.2"
-meson setup "$work/pcsc-build" "$work/pcsc-lite-2.5.2" --prefix="$prefix" --libdir=lib --buildtype=release -Dlibsystemd=false -Dlibudev=false -Dlibusb=true -Dpolkit=false -Dserial=false -Dusb=true -Dusbdropdir="$prefix/lib/pcsc/drivers"
+python "$script_dir/private_pcsc.py" "$work/pcsc-lite-2.5.3"
+meson setup "$work/pcsc-build" "$work/pcsc-lite-2.5.3" --prefix="$prefix" --libdir=lib --buildtype=release -Dlibsystemd=false -Dlibudev=false -Dlibusb=true -Dpolkit=false -Dserial=false -Dusb=true -Dusbdropdir="$prefix/lib/pcsc/drivers"
 meson compile -C "$work/pcsc-build" -j "$jobs"
 meson install -C "$work/pcsc-build"
 meson setup "$work/ccid-build" "$work/ccid-1.8.4" --prefix="$prefix" --libdir=lib --buildtype=release -Dudev-rules=false -Dserial=false -Denable-extras=false
